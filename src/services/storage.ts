@@ -5,6 +5,7 @@ const STORAGE_KEYS = {
   CURRENT_USER: 'traderos_current_user',
   ALL_USERS: 'traderos_registered_users',
   DEMO_MODE: 'traderos_demo_mode_active',
+  AUTH_SESSION: 'traderos_auth_session_active_v2',
 };
 
 function getTradesKey(userId: string): string {
@@ -22,6 +23,10 @@ function getPrefsKey(userId: string): string {
 export const StorageService = {
   // Auth & User Management
   getCurrentUser(): User | null {
+    const isSessionActive = localStorage.getItem(STORAGE_KEYS.AUTH_SESSION) === 'true';
+    if (!isSessionActive) {
+      return null;
+    }
     const raw = localStorage.getItem(STORAGE_KEYS.CURRENT_USER);
     if (raw) {
       try {
@@ -36,8 +41,10 @@ export const StorageService = {
   setCurrentUser(user: User | null): void {
     if (user) {
       localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(user));
+      localStorage.setItem(STORAGE_KEYS.AUTH_SESSION, 'true');
     } else {
       localStorage.removeItem(STORAGE_KEYS.CURRENT_USER);
+      localStorage.removeItem(STORAGE_KEYS.AUTH_SESSION);
     }
   },
 

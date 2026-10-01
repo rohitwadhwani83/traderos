@@ -43,9 +43,9 @@ export const MetricCard: React.FC<MetricCardProps> = ({
         {Icon && <Icon className="w-3.5 h-3.5 text-slate-400" />}
       </div>
 
-      <div className="flex items-baseline gap-2">
+      <div className="flex items-baseline justify-between gap-1.5 flex-wrap">
         <span
-          className={`text-xl font-semibold tracking-tight mono-nums ${
+          className={`text-lg sm:text-xl font-bold tracking-tight mono-nums whitespace-nowrap ${
             isPositive
               ? 'text-emerald-400'
               : isNegative
@@ -57,11 +57,11 @@ export const MetricCard: React.FC<MetricCardProps> = ({
         </span>
         {change && (
           <span
-            className={`text-xs font-medium mono-nums ${
+            className={`text-[11px] font-semibold mono-nums whitespace-nowrap px-1.5 py-0.5 rounded ${
               isPositive
-                ? 'text-emerald-400/90'
+                ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
                 : isNegative
-                ? 'text-rose-400/90'
+                ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
                 : 'text-slate-400'
             }`}
           >

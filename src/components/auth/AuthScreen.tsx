@@ -24,7 +24,7 @@ type AuthTab = 'login' | 'register' | 'forgot_password';
 export const AuthScreen: React.FC = () => {
   const { login, register, resetPassword, loginWithDemo } = useAuth();
 
-  const [activeTab, setActiveTab] = useState<AuthTab>('login');
+  const [activeTab, setActiveTab] = useState<AuthTab>('register');
 
   // Form Fields
   const [name, setName] = useState('');
@@ -142,9 +142,9 @@ export const AuthScreen: React.FC = () => {
         password,
       });
 
+      setIsProcessing(false);
       if (!res.success) {
         setErrorMessage(res.message);
-        setIsProcessing(false);
       }
     } else if (activeTab === 'forgot_password') {
       const identifier = email || mobileNumber;
@@ -205,8 +205,19 @@ export const AuthScreen: React.FC = () => {
 
       {/* Main Card Container */}
       <div className="w-full max-w-md bg-[#0f1422] border border-slate-800/90 rounded-2xl shadow-2xl p-6 sm:p-7 relative z-10 backdrop-blur-xl">
-        {/* Navigation Tabs (Login / Register / Forgot Password) */}
+        {/* Navigation Tabs (Register / Login / Forgot Password) */}
         <div className="grid grid-cols-2 gap-1 p-1 bg-[#090d16] border border-slate-800 rounded-xl text-xs font-semibold mb-5">
+          <button
+            type="button"
+            onClick={() => switchTab('register')}
+            className={`py-2 rounded-lg transition-all ${
+              activeTab === 'register'
+                ? 'bg-indigo-600 text-white shadow-sm'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            Create Account
+          </button>
           <button
             type="button"
             onClick={() => switchTab('login')}
@@ -217,17 +228,6 @@ export const AuthScreen: React.FC = () => {
             }`}
           >
             Sign In
-          </button>
-          <button
-            type="button"
-            onClick={() => switchTab('register')}
-            className={`py-2 rounded-lg transition-all ${
-              activeTab === 'register'
-                ? 'bg-indigo-600 text-white shadow-sm'
-                : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            Register Account
           </button>
         </div>
 

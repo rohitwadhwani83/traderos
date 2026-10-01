@@ -70,7 +70,7 @@ export const PerformanceHeader: React.FC = () => {
         <MetricCard
           label="Total Net P/L"
           value={formatCurrency(metrics.totalNetPnL, currency, true)}
-          change={formatPercent(metrics.totalReturnPercent)}
+          subtext={`${formatPercent(metrics.totalReturnPercent)} overall return`}
           isPositive={metrics.totalNetPnL > 0}
           isNegative={metrics.totalNetPnL < 0}
           icon={TrendingUp}
