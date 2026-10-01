@@ -17,9 +17,11 @@ import { OnboardingModal } from './components/auth/OnboardingModal';
 import { Modal } from './components/common/Modal';
 import { RiskCalculator } from './components/analyse/RiskCalculator';
 import { Trade } from './types';
+import { AuthScreen } from './components/auth/AuthScreen';
+import { DisclaimerModal } from './components/auth/DisclaimerModal';
 
 const MainLayout: React.FC = () => {
-  const { user } = useAuth();
+  const { user, currentUser, isAuthenticated, acceptDisclaimer } = useAuth();
   const [activeTab, setActiveTab] = useState<NavigationTab>('dashboard');
 
   // Modals state
@@ -28,8 +30,13 @@ const MainLayout: React.FC = () => {
   const [selectedTrade, setSelectedTrade] = useState<Trade | null>(null);
   const [isCsvImportOpen, setIsCsvImportOpen] = useState(false);
   const [isAuthOpen, setIsAuthOpen] = useState(false);
-  const [isOnboardingOpen, setIsOnboardingOpen] = useState(() => !user.isOnboarded);
+  const [isOnboardingOpen, setIsOnboardingOpen] = useState(() => Boolean(currentUser && !currentUser.isOnboarded));
   const [isRiskCalcOpen, setIsRiskCalcOpen] = useState(false);
+
+  // If not authenticated, require registration/login first
+  if (!isAuthenticated || !currentUser) {
+    return <AuthScreen />;
+  }
 
   const handleOpenAddTrade = () => {
     setEditingTrade(null);
@@ -137,6 +144,12 @@ const MainLayout: React.FC = () => {
       >
         <RiskCalculator />
       </Modal>
+
+      {/* Mandatory First-Time SEBI & Educational Disclaimer Modal */}
+      <DisclaimerModal
+        isOpen={Boolean(currentUser && !currentUser.hasAcceptedDisclaimer)}
+        onAccept={acceptDisclaimer}
+      />
     </div>
   );
 };

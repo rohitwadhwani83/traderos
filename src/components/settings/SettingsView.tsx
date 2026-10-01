@@ -1,22 +1,30 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useTrading } from '../../context/TradingContext';
-import { AssetClass } from '../../types';
 import {
   Settings as SettingsIcon,
   Shield,
   Download,
   Trash2,
-  RefreshCw,
   CheckCircle,
-  AlertTriangle,
   FileText,
   User,
+  Phone,
+  Lock,
+  CheckCircle2,
 } from 'lucide-react';
 
 export const SettingsView: React.FC = () => {
-  const { user, updateUserPreferences, isDemoMode, setDemoMode } = useAuth();
+  const { user, updateUserPreferences, resetPassword, isDemoMode } = useAuth();
   const { trades, tradePlans, exportCsv, resetAllData } = useTrading();
+
+  if (!user) {
+    return (
+      <div className="p-8 text-center text-slate-400">
+        Please sign in to access account settings.
+      </div>
+    );
+  }
 
   const [name, setName] = useState(user.name || '');
   const [currency, setCurrency] = useState(user.preferences.defaultCurrency);
@@ -31,6 +39,11 @@ export const SettingsView: React.FC = () => {
   const [aiEnabled, setAiEnabled] = useState(user.preferences.enableAIInsights);
   const [isSaved, setIsSaved] = useState(false);
 
+  // Password Management
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmNewPassword, setConfirmNewPassword] = useState('');
+  const [passwordStatus, setPasswordStatus] = useState<string | null>(null);
+
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     updateUserPreferences({
@@ -43,6 +56,23 @@ export const SettingsView: React.FC = () => {
     });
     setIsSaved(true);
     setTimeout(() => setIsSaved(false), 2000);
+  };
+
+  const handleUpdatePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newPassword || newPassword.length < 6) {
+      setPasswordStatus('Password must be at least 6 characters.');
+      return;
+    }
+    if (newPassword !== confirmNewPassword) {
+      setPasswordStatus('Passwords do not match.');
+      return;
+    }
+
+    const res = await resetPassword(user.email, newPassword);
+    setPasswordStatus(res.message);
+    setNewPassword('');
+    setConfirmNewPassword('');
   };
 
   const handleExportJson = () => {
@@ -85,16 +115,16 @@ export const SettingsView: React.FC = () => {
       </div>
 
       <form onSubmit={handleSave} className="space-y-6">
-        {/* Profile & Trading Preferences */}
+        {/* Profile & Verified Phone */}
         <div className="rounded-2xl border border-slate-800 bg-[#101522] p-5 shadow-lg space-y-4">
           <div className="flex items-center gap-2 pb-2 border-b border-slate-800/80">
             <User className="w-4 h-4 text-indigo-400" />
             <h3 className="text-sm font-semibold text-white tracking-tight">
-              Profile & Account
+              Profile & Verified Credentials
             </h3>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
               <label className="block text-xs font-medium text-slate-400 mb-1">Trader Name</label>
               <input
@@ -112,6 +142,21 @@ export const SettingsView: React.FC = () => {
                 disabled
                 className="w-full bg-[#161d2c]/60 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-400 cursor-not-allowed"
               />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-400 mb-1">Mobile Number</label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={user.mobileNumber || '+91 98765 43210'}
+                  disabled
+                  className="w-full bg-[#161d2c]/60 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-300 font-mono cursor-not-allowed"
+                />
+                <span className="flex items-center gap-1 text-[11px] font-semibold text-emerald-400 whitespace-nowrap bg-emerald-950/30 border border-emerald-500/30 px-2 py-1.5 rounded-lg">
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <span>OTP Verified</span>
+                </span>
+              </div>
             </div>
           </div>
         </div>
@@ -203,7 +248,7 @@ export const SettingsView: React.FC = () => {
                   onChange={(e) => setAiEnabled(e.target.checked)}
                   className="rounded bg-slate-800 border-slate-700 text-indigo-600 focus:ring-0"
                 />
-                <span>Enable AI Trading Coach & Insights</span>
+                <span>Enable AI Trading Coach (100% Free)</span>
               </label>
             </div>
           </div>
@@ -219,6 +264,53 @@ export const SettingsView: React.FC = () => {
           </div>
         </div>
       </form>
+
+      {/* Password Management */}
+      <div className="rounded-2xl border border-slate-800 bg-[#101522] p-5 shadow-lg space-y-4">
+        <div className="flex items-center gap-2 pb-2 border-b border-slate-800/80">
+          <Lock className="w-4 h-4 text-indigo-400" />
+          <h3 className="text-sm font-semibold text-white tracking-tight">
+            Password Management
+          </h3>
+        </div>
+
+        {passwordStatus && (
+          <div className="p-3 rounded-xl bg-indigo-950/30 border border-indigo-500/40 text-xs text-indigo-300">
+            {passwordStatus}
+          </div>
+        )}
+
+        <form onSubmit={handleUpdatePassword} className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div>
+            <label className="block text-xs font-medium text-slate-400 mb-1">New Password</label>
+            <input
+              type="password"
+              placeholder="Min. 6 characters"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              className="w-full bg-[#161d2c] border border-slate-700/80 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-400 mb-1">Confirm New Password</label>
+            <input
+              type="password"
+              placeholder="Repeat password"
+              value={confirmNewPassword}
+              onChange={(e) => setConfirmNewPassword(e.target.value)}
+              className="w-full bg-[#161d2c] border border-slate-700/80 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500"
+            />
+          </div>
+          <div className="flex items-end">
+            <button
+              type="submit"
+              className="w-full py-2 px-4 rounded-xl bg-[#161d2c] hover:bg-[#1f283d] border border-slate-700 text-slate-200 text-xs font-semibold transition-colors"
+            >
+              Update Password
+            </button>
+          </div>
+        </form>
+      </div>
 
       {/* Privacy, Export, and Data Ownership */}
       <div className="rounded-2xl border border-slate-800 bg-[#101522] p-5 shadow-lg space-y-4">
@@ -267,19 +359,17 @@ export const SettingsView: React.FC = () => {
       {/* Regulatory & Advisory Disclaimer */}
       <div className="p-4 rounded-2xl bg-[#0c101a] border border-slate-800/80 text-[11px] text-slate-500 leading-relaxed space-y-1.5">
         <span className="font-semibold text-slate-400 block text-xs">
-          Regulatory Notice & Decision Support Disclaimer
+          Regulatory Notice & Educational Platform Disclaimer
         </span>
         <p>
-          TraderOS is an analytical journaling and educational decision support system designed to
+          TraderOS is an analytical journaling and educational decision support system designed solely to
           assist self-directed traders in tracking behavioral tendencies, statistical edge, and risk
           parameters.
         </p>
         <p>
-          AI-generated market structures, support/resistance levels, and setup scenarios are
-          mathematical models for decision support and do not constitute investment advice, research
-          analyst recommendations, or guaranteed financial returns under applicable SEBI
-          regulations. Trading in equities, derivatives, commodities, and crypto carries substantial
-          capital risk. Always practice disciplined position sizing.
+          TraderOS is not a SEBI-registered Investment Adviser or Research Analyst and bears zero liability
+          for your financial gains or losses. Trading in equities, F&O derivatives, commodities, and
+          cryptocurrencies entails substantial capital risk.
         </p>
       </div>
     </div>

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Plus, Sparkles, User as UserIcon, ShieldAlert } from 'lucide-react';
+import { Plus, User as UserIcon, LogOut } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { marketDataProvider } from '../../services/marketData/provider';
 
@@ -9,7 +9,7 @@ interface NavbarProps {
 }
 
 export const Navbar: React.FC<NavbarProps> = ({ onOpenAddTrade, onOpenAuth }) => {
-  const { user, isDemoMode, setDemoMode } = useAuth();
+  const { user, currentUser, isDemoMode, setDemoMode, logout } = useAuth();
   const nseStatus = marketDataProvider.getMarketStatus('Indian Indices');
 
   return (
@@ -85,14 +85,28 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenAddTrade, onOpenAuth }) =>
           <span>Add Trade</span>
         </button>
 
-        {/* User Account / Login */}
+        {/* User Account / Profile */}
         <button
           onClick={onOpenAuth}
           className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-300 text-xs transition-colors"
         >
           <UserIcon className="w-3.5 h-3.5 text-slate-400" />
-          <span className="hidden md:inline font-medium">{user.name || user.email.split('@')[0]}</span>
+          <span className="hidden md:inline font-medium">
+            {currentUser ? (currentUser.name || currentUser.email.split('@')[0]) : 'Sign In'}
+          </span>
         </button>
+
+        {/* Logout Button */}
+        {currentUser && (
+          <button
+            onClick={logout}
+            title="Log Out"
+            className="flex items-center gap-1 px-2 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 text-rose-300 text-xs transition-colors"
+          >
+            <LogOut className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Logout</span>
+          </button>
+        )}
       </div>
     </header>
   );

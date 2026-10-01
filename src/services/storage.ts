@@ -21,20 +21,24 @@ function getPrefsKey(userId: string): string {
 
 export const StorageService = {
   // Auth & User Management
-  getCurrentUser(): User {
+  getCurrentUser(): User | null {
     const raw = localStorage.getItem(STORAGE_KEYS.CURRENT_USER);
     if (raw) {
       try {
         return JSON.parse(raw);
       } catch {
-        // Fall back to demo user
+        // invalid JSON
       }
     }
-    return DEMO_USER;
+    return null;
   },
 
-  setCurrentUser(user: User): void {
-    localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(user));
+  setCurrentUser(user: User | null): void {
+    if (user) {
+      localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(user));
+    } else {
+      localStorage.removeItem(STORAGE_KEYS.CURRENT_USER);
+    }
   },
 
   getRegisteredUsers(): User[] {
@@ -47,15 +51,38 @@ export const StorageService = {
     }
   },
 
+  findUser(identifier: string): User | undefined {
+    const users = this.getRegisteredUsers();
+    const cleanId = identifier.trim().toLowerCase();
+    const cleanPhone = identifier.replace(/[^0-9]/g, '');
+
+    return users.find((u) => {
+      const matchEmail = u.email.toLowerCase() === cleanId;
+      const matchPhone = u.mobileNumber && u.mobileNumber.replace(/[^0-9]/g, '').includes(cleanPhone);
+      return matchEmail || matchPhone;
+    });
+  },
+
   saveRegisteredUser(user: User): void {
     const users = this.getRegisteredUsers();
-    const existingIndex = users.findIndex((u) => u.id === user.id || u.email.toLowerCase() === user.email.toLowerCase());
+    const existingIndex = users.findIndex(
+      (u) =>
+        u.id === user.id ||
+        u.email.toLowerCase() === user.email.toLowerCase() ||
+        (u.mobileNumber && user.mobileNumber && u.mobileNumber === user.mobileNumber)
+    );
     if (existingIndex >= 0) {
       users[existingIndex] = user;
     } else {
       users.push(user);
     }
     localStorage.setItem(STORAGE_KEYS.ALL_USERS, JSON.stringify(users));
+
+    // Update session if it's the active user
+    const current = this.getCurrentUser();
+    if (current && current.id === user.id) {
+      this.setCurrentUser(user);
+    }
   },
 
   isDemoMode(): boolean {

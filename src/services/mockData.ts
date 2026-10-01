@@ -5,6 +5,10 @@ export const DEMO_USER: User = {
   id: 'usr_demo_trader_001',
   email: 'trader@traderos.ai',
   name: 'Dev Trader',
+  mobileNumber: '+91 98765 43210',
+  isPhoneVerified: true,
+  hasAcceptedDisclaimer: true,
+  disclaimerAcceptedAt: '2026-01-01T00:00:00Z',
   createdAt: '2026-01-01T00:00:00Z',
   isOnboarded: true,
   preferences: {

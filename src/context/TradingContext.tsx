@@ -71,11 +71,12 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   // Load trades and plans whenever user or demo mode toggles
   useEffect(() => {
-    const loadedTrades = StorageService.getTrades(user.id, isDemoMode);
-    const loadedPlans = StorageService.getPlans(user.id, isDemoMode);
+    const userId = user?.id || 'guest';
+    const loadedTrades = StorageService.getTrades(userId, isDemoMode);
+    const loadedPlans = StorageService.getPlans(userId, isDemoMode);
     setTrades(loadedTrades);
     setTradePlans(loadedPlans);
-  }, [user.id, isDemoMode]);
+  }, [user?.id, isDemoMode]);
 
   // Filter trades based on search, assetClass, direction, strategy, emotion, win/loss, and timeFilter
   const filteredTrades = useMemo(() => {
@@ -133,15 +134,18 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     });
   }, [trades, filters, timeFilter]);
 
+  const activeCapital = user?.preferences?.startingCapital || 100000;
+  const activeUserId = user?.id || 'guest';
+
   // Compute metrics from current trades
   const metrics = useMemo(() => {
-    return calculatePerformanceMetrics(user.preferences.startingCapital, filteredTrades);
-  }, [user.preferences.startingCapital, filteredTrades]);
+    return calculatePerformanceMetrics(activeCapital, filteredTrades);
+  }, [activeCapital, filteredTrades]);
 
   // Compute equity curve points
   const equityCurve = useMemo(() => {
-    return calculateEquityCurve(user.preferences.startingCapital, filteredTrades);
-  }, [user.preferences.startingCapital, filteredTrades]);
+    return calculateEquityCurve(activeCapital, filteredTrades);
+  }, [activeCapital, filteredTrades]);
 
   const resetFilters = () => setFilters(initialFilters);
 
@@ -149,22 +153,22 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const newTrade: Trade = {
       ...tradeData,
       id: `trade_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
-      userId: user.id,
+      userId: activeUserId,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
-    const updated = StorageService.addTrade(user.id, isDemoMode, newTrade);
+    const updated = StorageService.addTrade(activeUserId, isDemoMode, newTrade);
     setTrades(updated);
     return newTrade;
   };
 
   const updateTrade = (updatedTrade: Trade) => {
-    const updated = StorageService.updateTrade(user.id, isDemoMode, updatedTrade);
+    const updated = StorageService.updateTrade(activeUserId, isDemoMode, updatedTrade);
     setTrades(updated);
   };
 
   const deleteTrade = (tradeId: string) => {
-    const updated = StorageService.deleteTrade(user.id, isDemoMode, tradeId);
+    const updated = StorageService.deleteTrade(activeUserId, isDemoMode, tradeId);
     setTrades(updated);
   };
 
@@ -180,7 +184,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
-    const updated = StorageService.addTrade(user.id, isDemoMode, duplicated);
+    const updated = StorageService.addTrade(activeUserId, isDemoMode, duplicated);
     setTrades(updated);
   };
 
@@ -188,28 +192,28 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const newPlan: TradePlan = {
       ...planData,
       id: `plan_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
-      userId: user.id,
+      userId: activeUserId,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
-    const updated = StorageService.addPlan(user.id, isDemoMode, newPlan);
+    const updated = StorageService.addPlan(activeUserId, isDemoMode, newPlan);
     setTradePlans(updated);
     return newPlan;
   };
 
   const updateTradePlan = (updatedPlan: TradePlan) => {
-    const updated = StorageService.updatePlan(user.id, isDemoMode, updatedPlan);
+    const updated = StorageService.updatePlan(activeUserId, isDemoMode, updatedPlan);
     setTradePlans(updated);
   };
 
   const deleteTradePlan = (planId: string) => {
-    const updated = StorageService.deletePlan(user.id, isDemoMode, planId);
+    const updated = StorageService.deletePlan(activeUserId, isDemoMode, planId);
     setTradePlans(updated);
   };
 
   const importTrades = (newTrades: Trade[]) => {
     const combined = [...newTrades, ...trades];
-    StorageService.saveTrades(user.id, isDemoMode, combined);
+    StorageService.saveTrades(activeUserId, isDemoMode, combined);
     setTrades(combined);
   };
 
@@ -227,7 +231,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       setTrades(demo);
       setTradePlans(plans);
     } else {
-      StorageService.clearUserData(user.id);
+      StorageService.clearUserData(activeUserId);
       setTrades([]);
       setTradePlans([]);
     }
