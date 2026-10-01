@@ -88,11 +88,14 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenAddTrade, onOpenAuth }) =>
         {/* User Account / Profile */}
         <button
           onClick={onOpenAuth}
-          className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-300 text-xs transition-colors"
+          className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-[#121826] border border-slate-800 hover:border-slate-700 text-slate-300 text-xs transition-colors"
+          title="Click to view Trader Profile"
         >
-          <UserIcon className="w-3.5 h-3.5 text-slate-400" />
+          <div className="w-5 h-5 rounded-full bg-indigo-600/30 border border-indigo-500/40 flex items-center justify-center text-[10px] font-bold text-indigo-300">
+            {currentUser?.name ? currentUser.name[0].toUpperCase() : 'U'}
+          </div>
           <span className="hidden md:inline font-medium">
-            {currentUser ? (currentUser.name || currentUser.email.split('@')[0]) : 'Sign In'}
+            {currentUser ? currentUser.name : 'Sign In'}
           </span>
         </button>
 

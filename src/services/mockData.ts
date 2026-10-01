@@ -3,8 +3,8 @@ import { calculateGrossPnL, calculateNetPnL, calculateRisk, calculateReward, cal
 
 export const DEMO_USER: User = {
   id: 'usr_demo_trader_001',
-  email: 'trader@traderos.ai',
-  name: 'Dev Trader',
+  email: 'demo@traderos.ai',
+  name: 'Demo Trader',
   mobileNumber: '+91 98765 43210',
   isPhoneVerified: true,
   hasAcceptedDisclaimer: true,

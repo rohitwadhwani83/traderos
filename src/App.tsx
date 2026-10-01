@@ -12,7 +12,7 @@ import { SettingsView } from './components/settings/SettingsView';
 import { AddTradeModal } from './components/journal/AddTradeModal';
 import { TradeDetailModal } from './components/journal/TradeDetailModal';
 import { CsvImportModal } from './components/journal/CsvImportModal';
-import { AuthModal } from './components/auth/AuthModal';
+import { UserProfileModal } from './components/auth/UserProfileModal';
 import { OnboardingModal } from './components/auth/OnboardingModal';
 import { Modal } from './components/common/Modal';
 import { RiskCalculator } from './components/analyse/RiskCalculator';
@@ -123,9 +123,10 @@ const MainLayout: React.FC = () => {
         onClose={() => setIsCsvImportOpen(false)}
       />
 
-      <AuthModal
+      <UserProfileModal
         isOpen={isAuthOpen}
         onClose={() => setIsAuthOpen(false)}
+        onNavigateToSettings={() => setActiveTab('settings')}
       />
 
       <OnboardingModal

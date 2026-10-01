@@ -7,7 +7,7 @@ import { Wallet, TrendingUp, Award, Activity, ShieldAlert, Target } from 'lucide
 
 export const PerformanceHeader: React.FC = () => {
   const { metrics, filteredTrades } = useTrading();
-  const { user } = useAuth();
+  const { user, currentUser } = useAuth();
   const currency = user.preferences.defaultCurrency;
 
   // Compute greeting based on local time
@@ -28,7 +28,7 @@ export const PerformanceHeader: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-slate-800/60">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight uppercase">
-            {greeting}, {user.name || 'Trader'}
+            {greeting}, {currentUser?.name || user.name || 'Trader'}
           </h1>
           <p className="text-xs text-slate-400 mt-0.5">
             Your trading snapshot • {filteredTrades.length} trades recorded

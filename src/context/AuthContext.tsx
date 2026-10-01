@@ -41,9 +41,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const setDemoMode = (active: boolean) => {
     StorageService.setDemoMode(active);
     setIsDemoModeState(active);
-    if (active) {
-      setActiveUser(DEMO_USER);
-    }
+    // Preserves activeUser session so user identity is never lost
   };
 
   const loginWithDemo = () => {

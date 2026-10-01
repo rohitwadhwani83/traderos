@@ -94,7 +94,7 @@ export const StorageService = {
 
   isDemoMode(): boolean {
     const stored = localStorage.getItem(STORAGE_KEYS.DEMO_MODE);
-    if (stored === null) return true; // Default to demo mode for rich first-run experience
+    if (stored === null) return false; // Default to personal data for registered users
     return stored === 'true';
   },
 
