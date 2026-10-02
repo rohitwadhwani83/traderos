@@ -97,6 +97,32 @@ describe('Calculation Engine Tests', () => {
       expect(result.capitalUtilizationPercent).toBe(50);
     });
 
+    it('calculates position size accurately for micro-priced crypto pairs without rounding to 0', () => {
+      // User case: Capital = 6000, Risk = 1%, Max Loss = 60
+      // Entry = 0.008827, Stop = 0.008693 (Risk/unit = 0.000134) -> Position size = 447,761 units
+      const result = calculatePositionSize(6000, 1, 0.008827, 0.008693);
+      expect(result.maxRiskAmount).toBe(60);
+      expect(result.riskPerUnit).toBe(0.000134);
+      expect(result.positionSize).toBe(447761);
+      expect(result.capitalRequired).toBe(3952.39);
+      expect(result.capitalUtilizationPercent).toBe(65.87);
+
+      // And potential gain: Target = 0.009122 -> Reward = 0.000295 * 447761 = 132.09
+      const rewardPerUnit = 0.009122 - 0.008827;
+      const potentialGain = Number((rewardPerUnit * result.positionSize).toFixed(2));
+      expect(potentialGain).toBe(132.09);
+      expect(calculateRR(result.maxRiskAmount, potentialGain)).toBe(2.2);
+    });
+
+    it('calculates fractional position sizes for high-priced crypto (e.g. BTC)', () => {
+      // Capital = 10,000, Risk = 1%, Max Loss = 100, Entry = 65000, Stop = 64500 (Risk/unit = 500)
+      // Units = 100 / 500 = 0.2 BTC
+      const result = calculatePositionSize(10000, 1, 65000, 64500);
+      expect(result.maxRiskAmount).toBe(100);
+      expect(result.riskPerUnit).toBe(500);
+      expect(result.positionSize).toBe(0.2);
+    });
+
     it('returns 0 for zero or negative risk parameters', () => {
       const result = calculatePositionSize(100000, 0, 500, 490);
       expect(result.positionSize).toBe(0);

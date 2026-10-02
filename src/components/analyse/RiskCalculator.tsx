@@ -47,8 +47,19 @@ export const RiskCalculator: React.FC<RiskCalculatorProps> = ({
   const rewardPerUnit = direction === 'LONG'
     ? Math.max(0, numTarget - numEntry)
     : Math.max(0, numEntry - numTarget);
-  const potentialReward = Number((rewardPerUnit * positionSize).toFixed(2));
+  const potentialRewardRaw = rewardPerUnit * positionSize;
+  const potentialReward = potentialRewardRaw > 0 && potentialRewardRaw < 0.01
+    ? Number(potentialRewardRaw.toFixed(4))
+    : Number(potentialRewardRaw.toFixed(2));
   const rr = calculateRR(maxRiskAmount, potentialReward);
+
+  // Direction validation helpers
+  const isTargetMisaligned =
+    (direction === 'LONG' && numTarget > 0 && numTarget <= numEntry) ||
+    (direction === 'SHORT' && numTarget > 0 && numTarget >= numEntry);
+  const isStopMisaligned =
+    (direction === 'LONG' && numStop > 0 && numStop >= numEntry) ||
+    (direction === 'SHORT' && numStop > 0 && numStop <= numEntry);
 
   return (
     <div className="rounded-2xl border border-slate-800 bg-[#101522] p-5 shadow-lg">
@@ -173,7 +184,7 @@ export const RiskCalculator: React.FC<RiskCalculatorProps> = ({
                 Suggested Position Size
               </div>
               <div className="text-xl font-bold text-white mono-nums">
-                {positionSize} <span className="text-xs font-normal text-slate-400">units</span>
+                {positionSize.toLocaleString(undefined, { maximumFractionDigits: 4 })} <span className="text-xs font-normal text-slate-400">units</span>
               </div>
             </div>
             <div className="text-right">
@@ -212,6 +223,19 @@ export const RiskCalculator: React.FC<RiskCalculatorProps> = ({
               </span>
             </div>
           </div>
+
+          {/* Validation note for misaligned target or stop */}
+          {(isTargetMisaligned || isStopMisaligned) && (
+            <div className="p-2 rounded-lg bg-amber-500/15 border border-amber-500/30 text-[11px] text-amber-300 flex items-start gap-1.5">
+              <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5 text-amber-400" />
+              <span>
+                {isTargetMisaligned && direction === 'LONG' && 'For LONG trades, Target price should be higher than Entry to yield a positive gain.'}
+                {isTargetMisaligned && direction === 'SHORT' && 'For SHORT trades, Target price should be lower than Entry to yield a positive gain.'}
+                {isStopMisaligned && direction === 'LONG' && ' Stop Loss is set higher than or equal to Entry.'}
+                {isStopMisaligned && direction === 'SHORT' && ' Stop Loss is set lower than or equal to Entry.'}
+              </span>
+            </div>
+          )}
 
           {/* Capital utilization warning / confirmation */}
           <div className="pt-2 border-t border-slate-800/80 flex items-center gap-2 text-[11px]">

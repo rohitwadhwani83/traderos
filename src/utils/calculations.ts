@@ -97,9 +97,9 @@ export function calculatePositionSize(
   }
 
   const maxRiskAmount = Number((capital * (riskPercent / 100)).toFixed(2));
-  const riskPerUnit = Number(Math.abs(entryPrice - stopLoss).toFixed(2));
+  const rawDiff = Math.abs(entryPrice - stopLoss);
 
-  if (riskPerUnit <= 0) {
+  if (rawDiff <= 0) {
     return {
       positionSize: 0,
       maxRiskAmount,
@@ -109,7 +109,18 @@ export function calculatePositionSize(
     };
   }
 
-  const positionSize = Math.floor(maxRiskAmount / riskPerUnit);
+  // Dynamic precision for riskPerUnit based on price scale (avoids rounding to 0 for micro-assets)
+  const precision = rawDiff < 0.0001 ? 8 : rawDiff < 0.01 ? 6 : rawDiff < 1 ? 4 : 2;
+  const riskPerUnit = Number(rawDiff.toFixed(precision));
+
+  const rawUnits = maxRiskAmount / rawDiff;
+  // Position sizing: integer for standard/penny sizes (>= 10), 2-4 decimals for fractional high-value assets
+  const positionSize = rawUnits >= 10
+    ? Math.floor(rawUnits)
+    : rawUnits >= 1
+    ? Number(rawUnits.toFixed(2))
+    : Number(rawUnits.toFixed(4));
+
   const capitalRequired = Number((positionSize * entryPrice).toFixed(2));
   const capitalUtilizationPercent = capital > 0 ? Number(((capitalRequired / capital) * 100).toFixed(2)) : 0;
 

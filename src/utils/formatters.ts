@@ -8,17 +8,19 @@ export function formatCurrency(
   const sign = isNegative ? '-' : showSign && amount > 0 ? '+' : '';
 
   if (currency === 'INR') {
-    // Indian numbering format (e.g., ₹1,25,000.00)
+    // Dynamic precision: for small values < 1, display 4 or 6 decimals so micro-assets don't round to 0
+    const minDec = absAmount > 0 && absAmount < 0.01 ? 6 : absAmount > 0 && absAmount < 1 ? 4 : absAmount % 1 === 0 ? 0 : 2;
+    const maxDec = absAmount > 0 && absAmount < 0.01 ? 6 : absAmount > 0 && absAmount < 1 ? 4 : 2;
     const formatted = new Intl.NumberFormat('en-IN', {
-      minimumFractionDigits: absAmount % 1 === 0 ? 0 : 2,
-      maximumFractionDigits: 2,
+      minimumFractionDigits: minDec,
+      maximumFractionDigits: maxDec,
     }).format(absAmount);
     return `${sign}₹${formatted}`;
   }
 
   if (currency === 'USD') {
-    const minDec = absAmount < 1 ? 4 : absAmount % 1 === 0 ? 0 : 2;
-    const maxDec = absAmount < 0.01 ? 6 : absAmount < 1 ? 4 : 2;
+    const minDec = absAmount > 0 && absAmount < 0.01 ? 6 : absAmount < 1 ? 4 : absAmount % 1 === 0 ? 0 : 2;
+    const maxDec = absAmount > 0 && absAmount < 0.01 ? 6 : absAmount < 1 ? 4 : 2;
     const formatted = new Intl.NumberFormat('en-US', {
       minimumFractionDigits: minDec,
       maximumFractionDigits: maxDec,
@@ -27,8 +29,8 @@ export function formatCurrency(
   }
 
   // USDT
-  const minDec = absAmount < 1 ? 4 : 2;
-  const maxDec = absAmount < 0.01 ? 6 : absAmount < 1 ? 4 : 2;
+  const minDec = absAmount > 0 && absAmount < 0.01 ? 6 : absAmount < 1 ? 4 : 2;
+  const maxDec = absAmount > 0 && absAmount < 0.01 ? 6 : absAmount < 1 ? 4 : 2;
   const formatted = new Intl.NumberFormat('en-US', {
     minimumFractionDigits: minDec,
     maximumFractionDigits: maxDec,
