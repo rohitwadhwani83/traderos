@@ -38,6 +38,10 @@ const KNOWN_INSTRUMENTS: Record<string, { assetClass: AssetClass; canonical: str
   BTC: { assetClass: 'Crypto', canonical: 'BTCUSDT' },
   ETH: { assetClass: 'Crypto', canonical: 'ETHUSDT' },
   ALICE: { assetClass: 'Crypto', canonical: 'ALICEUSDT' },
+  MAGMAUSDT: { assetClass: 'Crypto', canonical: 'MAGMAUSDT' },
+  MAGMA: { assetClass: 'Crypto', canonical: 'MAGMAUSDT' },
+  GTCUSDT: { assetClass: 'Crypto', canonical: 'GTCUSDT' },
+  GTC: { assetClass: 'Crypto', canonical: 'GTCUSDT' },
 };
 
 /**

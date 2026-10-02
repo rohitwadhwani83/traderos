@@ -18,4 +18,11 @@ describe('MarketDataProvider with Crypto Support', () => {
     // Support levels should not all be zero or identical
     expect(technicals.supportLevels[0]).toBeGreaterThan(technicals.supportLevels[2]);
   });
+
+  it('should retrieve a live quote for MAGMA / MAGMAUSDT from Binance Futures', async () => {
+    const quote = await marketDataProvider.getQuote('MAGMA USDT');
+    expect(quote.symbol).toContain('MAGMA');
+    expect(quote.price).toBeGreaterThan(0.1);
+    expect(quote.assetClass).toBe('Crypto');
+  });
 });

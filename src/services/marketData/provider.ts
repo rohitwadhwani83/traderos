@@ -156,6 +156,42 @@ const INSTRUMENT_REGISTRY: Record<string, InstrumentConfig> = {
     volatility: 4.2,
     exchange: 'BINANCE',
   },
+  MAGMAUSDT: {
+    symbol: 'MAGMAUSDT',
+    name: 'Magma / TetherUS Perpetual',
+    assetClass: 'Crypto',
+    basePrice: 0.2494,
+    tickSize: 0.0001,
+    volatility: 5.0,
+    exchange: 'BINANCE',
+  },
+  MAGMA: {
+    symbol: 'MAGMAUSDT',
+    name: 'Magma / TetherUS Perpetual',
+    assetClass: 'Crypto',
+    basePrice: 0.2494,
+    tickSize: 0.0001,
+    volatility: 5.0,
+    exchange: 'BINANCE',
+  },
+  GTCUSDT: {
+    symbol: 'GTCUSDT',
+    name: 'Gitcoin / TetherUS Spot',
+    assetClass: 'Crypto',
+    basePrice: 0.1437,
+    tickSize: 0.0001,
+    volatility: 4.5,
+    exchange: 'BINANCE',
+  },
+  GTC: {
+    symbol: 'GTCUSDT',
+    name: 'Gitcoin / TetherUS Spot',
+    assetClass: 'Crypto',
+    basePrice: 0.1437,
+    tickSize: 0.0001,
+    volatility: 4.5,
+    exchange: 'BINANCE',
+  },
 };
 
 export class DefaultMarketDataProvider implements MarketDataProvider {
@@ -196,40 +232,86 @@ export class DefaultMarketDataProvider implements MarketDataProvider {
     return 'CLOSED';
   }
 
-  async fetchBinanceTicker(pair: string): Promise<MarketQuote | null> {
+  async fetchBinanceTicker(rawPair: string): Promise<MarketQuote | null> {
+    const pair = rawPair.replace(/\.P$/i, '').replace(/PERP$/i, '').replace(/[^A-Z0-9]/gi, '').toUpperCase();
+
+    // 1. Try Binance Spot API
     try {
       const res = await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${pair}`);
-      if (!res.ok) return null;
-      const data = await res.json();
-      const currentPrice = parseFloat(data.lastPrice);
-      const change = parseFloat(data.priceChange);
-      const changePercent = parseFloat(data.priceChangePercent);
-      const sessionHigh = parseFloat(data.highPrice);
-      const sessionLow = parseFloat(data.lowPrice);
-      const open = parseFloat(data.openPrice);
-      const previousClose = parseFloat(data.prevClosePrice);
-      const volume = parseFloat(data.volume);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.lastPrice) {
+          const currentPrice = parseFloat(data.lastPrice);
+          const change = parseFloat(data.priceChange);
+          const changePercent = parseFloat(data.priceChangePercent);
+          const sessionHigh = parseFloat(data.highPrice);
+          const sessionLow = parseFloat(data.lowPrice);
+          const open = parseFloat(data.openPrice);
+          const previousClose = parseFloat(data.prevClosePrice);
+          const volume = parseFloat(data.volume);
 
-      return {
-        symbol: pair,
-        instrumentName: `${pair} 24/7 Spot`,
-        assetClass: 'Crypto',
-        price: currentPrice,
-        change,
-        changePercent,
-        sessionHigh,
-        sessionLow,
-        open,
-        previousClose,
-        volume,
-        marketStatus: 'OPEN',
-        dataQuality: 'LIVE',
-        dataSource: 'Binance Live 24/7 Public Spot Feed',
-        timestamp: new Date().toLocaleTimeString('en-US', { hour12: false }),
-      };
+          return {
+            symbol: pair,
+            instrumentName: `${pair} 24/7 Spot`,
+            assetClass: 'Crypto',
+            price: currentPrice,
+            change,
+            changePercent,
+            sessionHigh,
+            sessionLow,
+            open,
+            previousClose,
+            volume,
+            marketStatus: 'OPEN',
+            dataQuality: 'LIVE',
+            dataSource: 'Binance Live 24/7 Public Spot Feed',
+            timestamp: new Date().toLocaleTimeString('en-US', { hour12: false }),
+          };
+        }
+      }
     } catch {
-      return null;
+      // Fall through to Futures
     }
+
+    // 2. Try Binance Futures (Perpetual) API
+    try {
+      const fRes = await fetch(`https://fapi.binance.com/fapi/v1/ticker/24hr?symbol=${pair}`);
+      if (fRes.ok) {
+        const fData = await fRes.json();
+        if (fData.lastPrice) {
+          const currentPrice = parseFloat(fData.lastPrice);
+          const change = parseFloat(fData.priceChange);
+          const changePercent = parseFloat(fData.priceChangePercent);
+          const sessionHigh = parseFloat(fData.highPrice);
+          const sessionLow = parseFloat(fData.lowPrice);
+          const open = parseFloat(fData.openPrice);
+          const previousClose = currentPrice - change;
+          const volume = parseFloat(fData.volume);
+
+          return {
+            symbol: pair,
+            instrumentName: `${pair} Perpetual Contract`,
+            assetClass: 'Crypto',
+            price: currentPrice,
+            change,
+            changePercent,
+            sessionHigh,
+            sessionLow,
+            open,
+            previousClose,
+            volume,
+            marketStatus: 'OPEN',
+            dataQuality: 'LIVE',
+            dataSource: 'Binance Live 24/7 Futures Public Feed',
+            timestamp: new Date().toLocaleTimeString('en-US', { hour12: false }),
+          };
+        }
+      }
+    } catch {
+      // Fallback
+    }
+
+    return null;
   }
 
   async getQuote(symbolQuery: string): Promise<MarketQuote> {
@@ -302,30 +384,58 @@ export class DefaultMarketDataProvider implements MarketDataProvider {
     };
   }
 
-  async fetchBinanceCandles(pair: string, timeframe: string, count: number = 30): Promise<Candle[] | null> {
+  async fetchBinanceCandles(rawPair: string, timeframe: string, count: number = 30): Promise<Candle[] | null> {
+    const pair = rawPair.replace(/\.P$/i, '').replace(/PERP$/i, '').replace(/[^A-Z0-9]/gi, '').toUpperCase();
+    const intervalMap: Record<string, string> = {
+      '5m': '5m',
+      '15m': '15m',
+      '1h': '1h',
+      '4h': '4h',
+      '1d': '1d',
+    };
+    const interval = intervalMap[timeframe] || '15m';
+
+    // 1. Try Spot klines
     try {
-      const intervalMap: Record<string, string> = {
-        '5m': '5m',
-        '15m': '15m',
-        '1h': '1h',
-        '4h': '4h',
-        '1d': '1d',
-      };
-      const interval = intervalMap[timeframe] || '15m';
       const res = await fetch(`https://api.binance.com/api/v3/klines?symbol=${pair}&interval=${interval}&limit=${count}`);
-      if (!res.ok) return null;
-      const data = await res.json();
-      return data.map((k: any) => ({
-        timestamp: new Date(k[0]).toISOString(),
-        open: parseFloat(k[1]),
-        high: parseFloat(k[2]),
-        low: parseFloat(k[3]),
-        close: parseFloat(k[4]),
-        volume: parseFloat(k[5]),
-      }));
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data) && data.length > 0) {
+          return data.map((k: any) => ({
+            timestamp: new Date(k[0]).toISOString(),
+            open: parseFloat(k[1]),
+            high: parseFloat(k[2]),
+            low: parseFloat(k[3]),
+            close: parseFloat(k[4]),
+            volume: parseFloat(k[5]),
+          }));
+        }
+      }
     } catch {
-      return null;
+      // Fall through to Futures
     }
+
+    // 2. Try Futures klines
+    try {
+      const fRes = await fetch(`https://fapi.binance.com/fapi/v1/klines?symbol=${pair}&interval=${interval}&limit=${count}`);
+      if (fRes.ok) {
+        const data = await fRes.json();
+        if (Array.isArray(data) && data.length > 0) {
+          return data.map((k: any) => ({
+            timestamp: new Date(k[0]).toISOString(),
+            open: parseFloat(k[1]),
+            high: parseFloat(k[2]),
+            low: parseFloat(k[3]),
+            close: parseFloat(k[4]),
+            volume: parseFloat(k[5]),
+          }));
+        }
+      }
+    } catch {
+      // Fallback
+    }
+
+    return null;
   }
 
   async getHistoricalCandles(symbol: string, timeframe: string, count: number = 30): Promise<Candle[]> {

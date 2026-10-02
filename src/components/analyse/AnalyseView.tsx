@@ -102,58 +102,63 @@ export const AnalyseView: React.FC = () => {
   };
 
   const [urlFallbackPrompt, setUrlFallbackPrompt] = useState<boolean>(false);
-  const [fallbackSymbol, setFallbackSymbol] = useState<string>('GTCUSDT');
+  const [fallbackSymbol, setFallbackSymbol] = useState<string>('');
+  const [urlSymbolInput, setUrlSymbolInput] = useState<string>('');
   const [urlSnapshotUrl, setUrlSnapshotUrl] = useState<string | null>(null);
 
   // Handle URL Parse & Auto-Analysis
-  const processChartUrl = async (urlToTest: string) => {
+  const processChartUrl = async (urlToTest: string, explicitSymbol?: string) => {
     if (!urlToTest.trim()) return;
     setError(null);
     setUrlFallbackPrompt(false);
     // Clear old analysis so the user never sees stale previous instrument data
     setAnalysis(null);
     setMtfData(null);
-    setIsLoading(true);
 
     const parsed = parseChartUrl(urlToTest);
     setUrlMessage(parsed.message);
+
+    // Determine target symbol: explicit argument > user symbol input > parsed normalized instrument > parsed symbol
+    const target = (explicitSymbol || urlSymbolInput || parsed.normalizedInstrument || parsed.symbol || '').trim().toUpperCase();
 
     if (parsed.isSnapshot && parsed.snapshotUrl) {
       setUrlSnapshotUrl(parsed.snapshotUrl);
       setScreenshotData(parsed.snapshotUrl); // Keep in sync
 
-      const targetSym = (parsed.normalizedInstrument || parsed.symbol || fallbackSymbol || 'GTCUSDT').toUpperCase();
-      setSelectedInstrument(targetSym);
-      setScreenshotInstrument(targetSym);
-      setFallbackSymbol(targetSym);
-      addRecent(targetSym);
+      if (target) {
+        setIsLoading(true);
+        setSelectedInstrument(target);
+        setScreenshotInstrument(target);
+        setFallbackSymbol(target);
+        setUrlSymbolInput(target);
+        addRecent(target);
 
-      // ALWAYS automatically trigger fresh analysis immediately!
-      await triggerScreenshotAnalysis(
-        parsed.snapshotUrl,
-        targetSym,
-        '15m'
-      );
-
-      // Keep quick switch chips available in case the chart belongs to another pair
-      setUrlFallbackPrompt(true);
+        await triggerScreenshotAnalysis(
+          parsed.snapshotUrl,
+          target,
+          '15m'
+        );
+        setUrlFallbackPrompt(true);
+      } else {
+        // No symbol provided or detected from URL yet - show snapshot preview & prominent selection chips
+        setIsLoading(false);
+        setUrlFallbackPrompt(true);
+      }
       return;
     }
 
-    if (parsed.normalizedInstrument && !parsed.requiresFallback) {
+    if (target) {
+      setIsLoading(true);
       setUrlSnapshotUrl(null);
       setUrlFallbackPrompt(false);
-      setSelectedInstrument(parsed.normalizedInstrument);
-      setScreenshotInstrument(parsed.normalizedInstrument);
-      addRecent(parsed.normalizedInstrument);
-      await runInstrumentAnalysis(parsed.normalizedInstrument);
+      setSelectedInstrument(target);
+      setScreenshotInstrument(target);
+      setUrlSymbolInput(target);
+      addRecent(target);
+      await runInstrumentAnalysis(target);
     } else {
+      setIsLoading(false);
       setUrlFallbackPrompt(true);
-      const targetSym = (parsed.symbol || fallbackSymbol || 'GTCUSDT').toUpperCase();
-      setFallbackSymbol(targetSym);
-      setSelectedInstrument(targetSym);
-      addRecent(targetSym);
-      await runInstrumentAnalysis(targetSym);
     }
   };
 
@@ -164,7 +169,7 @@ export const AnalyseView: React.FC = () => {
 
   // Trigger Screenshot Analysis
   const triggerScreenshotAnalysis = async (imgUrl: string, sym: string, tf: string) => {
-    const cleanSym = (sym.trim() || 'GTCUSDT').toUpperCase();
+    const cleanSym = (sym.trim() || 'MAGMA USDT').toUpperCase();
     addRecent(cleanSym);
     // Explicitly reset prior analysis so fresh insights load with clear visual feedback
     setAnalysis(null);
@@ -502,21 +507,39 @@ export const AnalyseView: React.FC = () => {
         {/* METHOD 3: URL Paste */}
         {method === 'url' && (
           <div className="space-y-4">
-            <form onSubmit={handleUrlSubmit} className="flex gap-2">
-              <input
-                type="text"
-                placeholder="Paste TradingView, Binance, or Chart URL (e.g. https://www.tradingview.com/chart/?symbol=BINANCE:ALICEUSDT)"
-                value={urlInput}
-                onChange={(e) => setUrlInput(e.target.value)}
-                className="flex-1 bg-[#161d2c] border border-slate-700/80 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500 font-mono"
-              />
+            <form onSubmit={handleUrlSubmit} className="flex flex-col sm:flex-row gap-2">
+              <div className="flex-1 relative">
+                <LinkIcon className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="Paste TradingView, Binance, or Chart URL (e.g. https://www.tradingview.com/x/e0CIWLuq/)"
+                  value={urlInput}
+                  onChange={(e) => setUrlInput(e.target.value)}
+                  className="w-full bg-[#161d2c] border border-slate-700/80 rounded-xl pl-9 pr-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500 font-mono"
+                />
+              </div>
+
+              <div className="w-full sm:w-48 relative">
+                <input
+                  type="text"
+                  placeholder="Symbol (e.g. MAGMA, NIFTY)"
+                  value={urlSymbolInput}
+                  onChange={(e) => {
+                    const val = e.target.value.toUpperCase();
+                    setUrlSymbolInput(val);
+                    setFallbackSymbol(val);
+                  }}
+                  className="w-full bg-[#161d2c] border border-slate-700/80 rounded-xl px-3 py-2 text-xs text-white uppercase focus:outline-none focus:border-indigo-500 font-mono"
+                />
+              </div>
+
               <button
                 type="submit"
                 disabled={isLoading || !urlInput.trim()}
-                className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-semibold shadow-sm flex items-center gap-1.5 transition-all"
+                className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-semibold shadow-sm flex items-center justify-center gap-1.5 transition-all"
               >
                 <Search className="w-3.5 h-3.5" />
-                <span>{isLoading ? 'Inspecting...' : 'Inspect URL'}</span>
+                <span>{isLoading ? 'Analysing...' : 'Inspect & Analyse'}</span>
               </button>
             </form>
 
@@ -526,13 +549,29 @@ export const AnalyseView: React.FC = () => {
               <button
                 type="button"
                 onClick={() => {
+                  const url = 'https://www.tradingview.com/x/e0CIWLuq/';
+                  setUrlInput(url);
+                  setUrlSymbolInput('MAGMA USDT');
+                  setFallbackSymbol('MAGMA USDT');
+                  processChartUrl(url, 'MAGMA USDT');
+                }}
+                className="px-2 py-0.5 rounded bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 font-mono transition-colors"
+              >
+                Snapshot: TV Magma /x/e0CIWLuq/
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
                   const url = 'https://www.tradingview.com/x/n1NmKXVv/';
                   setUrlInput(url);
-                  processChartUrl(url);
+                  setUrlSymbolInput('GTCUSDT');
+                  setFallbackSymbol('GTCUSDT');
+                  processChartUrl(url, 'GTCUSDT');
                 }}
-                className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-amber-300 font-mono transition-colors"
+                className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-indigo-300 font-mono transition-colors"
               >
-                Snapshot: TV /x/n1NmKXVv/
+                Snapshot: TV GTC /x/n1NmKXVv/
               </button>
 
               <button
@@ -540,9 +579,11 @@ export const AnalyseView: React.FC = () => {
                 onClick={() => {
                   const url = 'https://www.tradingview.com/chart/?symbol=BINANCE:ALICEUSDT';
                   setUrlInput(url);
-                  processChartUrl(url);
+                  setUrlSymbolInput('ALICE USDT');
+                  setFallbackSymbol('ALICE USDT');
+                  processChartUrl(url, 'ALICE USDT');
                 }}
-                className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-indigo-300 font-mono transition-colors"
+                className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 font-mono transition-colors"
               >
                 TradingView: ALICE/USDT
               </button>
@@ -552,23 +593,13 @@ export const AnalyseView: React.FC = () => {
                 onClick={() => {
                   const url = 'https://www.tradingview.com/chart/?symbol=NSE:NIFTY';
                   setUrlInput(url);
-                  processChartUrl(url);
+                  setUrlSymbolInput('NIFTY');
+                  setFallbackSymbol('NIFTY');
+                  processChartUrl(url, 'NIFTY');
                 }}
-                className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-indigo-300 font-mono transition-colors"
+                className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 font-mono transition-colors"
               >
                 TradingView: NIFTY 50
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  const url = 'https://www.binance.com/en/trade/ALICE_USDT';
-                  setUrlInput(url);
-                  processChartUrl(url);
-                }}
-                className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-indigo-300 font-mono transition-colors"
-              >
-                Binance: ALICE/USDT
               </button>
             </div>
 
@@ -608,27 +639,28 @@ export const AnalyseView: React.FC = () => {
               </div>
             )}
 
-            {/* Symbol Confirmation Prompt within URL Tab */}
+            {/* Symbol Confirmation & Selection Prompt within URL Tab */}
             {urlFallbackPrompt && (
               <div className="p-3.5 rounded-xl bg-[#0a0f1d] border border-amber-500/30 space-y-3">
                 <div>
                   <p className="text-xs text-amber-300 font-semibold">
-                    Confirm Instrument for Setup Analysis:
+                    Select or Enter Instrument for Setup Analysis:
                   </p>
                   <p className="text-[11px] text-slate-400 mt-0.5">
-                    TradingView snapshot images keep the symbol private in the link. Select or confirm the symbol to complete analysis:
+                    TradingView snapshot images keep the symbol private in the link. Click your instrument below or enter the symbol to analyze:
                   </p>
                 </div>
 
                 {/* Quick suggestions */}
                 <div className="flex flex-wrap items-center gap-1.5">
                   <span className="text-[10px] text-slate-500">Quick Select:</span>
-                  {['GTCUSDT', 'ALICE USDT', 'BTCUSDT', 'NIFTY', 'BANKNIFTY'].map((sym) => (
+                  {['MAGMA USDT', 'GTCUSDT', 'ALICE USDT', 'BTCUSDT', 'NIFTY', 'BANKNIFTY'].map((sym) => (
                     <button
                       key={sym}
                       type="button"
                       onClick={() => {
                         setFallbackSymbol(sym);
+                        setUrlSymbolInput(sym);
                         setSelectedInstrument(sym);
                         setScreenshotInstrument(sym);
                         addRecent(sym);
@@ -639,8 +671,8 @@ export const AnalyseView: React.FC = () => {
                         }
                       }}
                       className={`px-2.5 py-1 rounded-lg text-xs font-mono font-semibold border transition-all ${
-                        fallbackSymbol === sym
-                          ? 'bg-indigo-600/30 text-indigo-300 border-indigo-500'
+                        fallbackSymbol === sym || selectedInstrument === sym
+                          ? 'bg-amber-500/25 text-amber-300 border-amber-500/60 shadow-sm'
                           : 'bg-[#141b2a] text-slate-300 border-slate-700/80 hover:text-white'
                       }`}
                     >
@@ -652,9 +684,13 @@ export const AnalyseView: React.FC = () => {
                 <div className="flex items-center gap-2">
                   <input
                     type="text"
-                    placeholder="e.g. GTCUSDT, ALICE USDT, BTCUSDT, NIFTY"
+                    placeholder="e.g. MAGMA USDT, GTCUSDT, ALICE USDT, BTCUSDT, NIFTY"
                     value={fallbackSymbol}
-                    onChange={(e) => setFallbackSymbol(e.target.value.toUpperCase())}
+                    onChange={(e) => {
+                      const val = e.target.value.toUpperCase();
+                      setFallbackSymbol(val);
+                      setUrlSymbolInput(val);
+                    }}
                     className="flex-1 bg-[#161d2c] border border-slate-700/80 rounded-xl px-3 py-1.5 text-xs text-white uppercase font-mono focus:outline-none focus:border-indigo-500"
                   />
                   <button
@@ -665,6 +701,7 @@ export const AnalyseView: React.FC = () => {
                         const clean = fallbackSymbol.trim().toUpperCase();
                         setSelectedInstrument(clean);
                         setScreenshotInstrument(clean);
+                        setUrlSymbolInput(clean);
                         addRecent(clean);
                         if (urlSnapshotUrl) {
                           triggerScreenshotAnalysis(urlSnapshotUrl, clean, '15m');
@@ -673,10 +710,10 @@ export const AnalyseView: React.FC = () => {
                         }
                       }
                     }}
-                    className="px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-semibold shadow-sm flex items-center gap-1.5 transition-all"
+                    className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-semibold shadow-sm flex items-center gap-1.5 transition-all"
                   >
                     <Sparkles className="w-3.5 h-3.5" />
-                    <span>{urlSnapshotUrl ? 'Analyse Chart Snapshot →' : 'Analyse Symbol →'}</span>
+                    <span>{urlSnapshotUrl ? `Analyse ${fallbackSymbol || 'Chart'} →` : 'Analyse Symbol →'}</span>
                   </button>
                 </div>
               </div>
