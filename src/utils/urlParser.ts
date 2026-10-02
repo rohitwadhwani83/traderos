@@ -92,6 +92,16 @@ export function parseChartUrl(urlStr: string): ParsedChartUrl {
         if (detectedSymbol.includes(':')) {
           detectedSymbol = detectedSymbol.split(':')[1];
         }
+        // Check if path has symbol slug after dash: e.g. /x/ID-MAGMAUSDT/
+        if (!detectedSymbol && pathname.includes('-')) {
+          const parts = pathname.split('-');
+          if (parts.length > 1) {
+            detectedSymbol = parts[parts.length - 1].replace(/[^A-Z0-9]/gi, '');
+          }
+        }
+        if (detectedSymbol) {
+          detectedSymbol = detectedSymbol.replace(/\.P$/i, '').replace(/PERP$/i, '').toUpperCase();
+        }
 
         return {
           isValid: true,
@@ -99,10 +109,10 @@ export function parseChartUrl(urlStr: string): ParsedChartUrl {
           provider: 'TradingView',
           isSnapshot: true,
           snapshotUrl,
-          symbol: detectedSymbol ? detectedSymbol.toUpperCase() : undefined,
-          normalizedInstrument: detectedSymbol ? detectedSymbol.toUpperCase() : undefined,
+          symbol: detectedSymbol || undefined,
+          normalizedInstrument: detectedSymbol || undefined,
           message: detectedSymbol
-            ? `TradingView Snapshot detected for ${detectedSymbol.toUpperCase()}. Running setup analysis...`
+            ? `TradingView Snapshot detected for ${detectedSymbol}. Running setup analysis...`
             : 'TradingView Snapshot image loaded! Confirm or select the instrument below to analyze.',
           requiresFallback: !detectedSymbol,
         };
@@ -157,6 +167,8 @@ export function parseChartUrl(urlStr: string): ParsedChartUrl {
       }
 
       if (symbol) {
+        // Strip derivative suffixes .P and PERP before stripping non-alphanumeric chars
+        symbol = symbol.replace(/\.P$/i, '').replace(/PERP$/i, '');
         const cleanSymbol = symbol.replace(/[^A-Z0-9]/g, '');
         const matched = KNOWN_INSTRUMENTS[cleanSymbol];
         const isCrypto =
@@ -254,11 +266,17 @@ export function parseChartUrl(urlStr: string): ParsedChartUrl {
 export async function fetchTradingViewSnapshotInfo(
   urlStr: string
 ): Promise<{ symbol?: string; imageUrl?: string; title?: string } | null> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 1800);
+
   try {
     const encoded = encodeURIComponent(urlStr.trim());
-    const res = await fetch(`https://api.microlink.io/?url=${encoded}`, {
+    const res = await fetch(`https://api.microlink.io/?url=${encoded}&filter=title,image`, {
       headers: { Accept: 'application/json' },
+      signal: controller.signal,
     });
+    clearTimeout(timeoutId);
+
     if (!res.ok) return null;
     const json = await res.json();
     if (json.status !== 'success' || !json.data) return null;
@@ -268,9 +286,17 @@ export async function fetchTradingViewSnapshotInfo(
 
     let symbol: string | undefined;
     if (title) {
-      const match = title.match(/(?:([A-Z0-9]+):)?([A-Z0-9_]+)(?:\.[A-Z0-9]+)?\s+Chart Image/i);
-      if (match && match[2]) {
-        symbol = match[2].toUpperCase();
+      // Examples:
+      // "BINANCE:MAGMAUSDT.P Chart Image by rohitwad2023"
+      // "BINANCE:MAGMAUSDT Chart Image"
+      // "NSE:NIFTY Chart Image"
+      const match = title.match(/(?:([A-Z0-9]+):)?([A-Z0-9_]+?)(?:\.[A-Z0-9]+)?(?:\s+PERP)?\s+Chart Image/i)
+        || title.match(/([A-Z0-9_]{3,12})/i);
+      if (match) {
+        const found = match[2] || match[1];
+        if (found) {
+          symbol = found.replace(/\.P$/i, '').replace(/PERP$/i, '').toUpperCase();
+        }
       }
     }
 
@@ -280,6 +306,7 @@ export async function fetchTradingViewSnapshotInfo(
       title,
     };
   } catch {
+    clearTimeout(timeoutId);
     return null;
   }
 }

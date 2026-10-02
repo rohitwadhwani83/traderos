@@ -41,10 +41,16 @@ describe('Chart URL Parser', () => {
     expect(result.snapshotUrl).toContain('snapshots');
   });
 
-  it('parses TradingView snapshot with explicit symbol parameter correctly', () => {
-    const result = parseChartUrl('https://www.tradingview.com/x/e0CIWLuq/?symbol=BINANCE:MAGMAUSDT');
+  it('parses TradingView snapshot with explicit symbol parameter and strips .P / PERP', () => {
+    const result = parseChartUrl('https://www.tradingview.com/x/e0CIWLuq/?symbol=BINANCE:MAGMAUSDT.P');
     expect(result.isValid).toBe(true);
     expect(result.isSnapshot).toBe(true);
+    expect(result.symbol).toBe('MAGMAUSDT');
+  });
+
+  it('strips .P perpetual suffix from standard TradingView chart URLs', () => {
+    const result = parseChartUrl('https://www.tradingview.com/chart/?symbol=BINANCE:MAGMAUSDT.P');
+    expect(result.isValid).toBe(true);
     expect(result.symbol).toBe('MAGMAUSDT');
   });
 

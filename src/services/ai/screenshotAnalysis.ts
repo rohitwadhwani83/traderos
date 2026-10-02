@@ -51,6 +51,7 @@ export async function analyzeChartScreenshot(
     analyzedAt: now.toISOString(),
     higherTimeframeStructure: `Estimated ${timeframe} structure: Price consolidating above key horizontal shelf on ${quote.symbol}.`,
     lowerTimeframeStructure: `Shallow pullback observed testing dynamic support with contracting candle volume.`,
+    mtfData: mtf,
     riskNotes: [
       'Chart analysis derived from uploaded visual elements. Real-time tick depth and order book data cannot be verified from a static image.',
       'Ensure the visible timestamp on your screenshot corresponds to current trading sessions before committing real capital.',

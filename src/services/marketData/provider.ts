@@ -316,15 +316,19 @@ export class DefaultMarketDataProvider implements MarketDataProvider {
 
   async getQuote(symbolQuery: string): Promise<MarketQuote> {
     const rawClean = symbolQuery.toUpperCase().trim();
-    // Normalize spaces and slashes: 'ALICE USDT' -> 'ALICEUSDT', 'ALICE/USDT' -> 'ALICEUSDT'
-    let cleanSym = rawClean.replace(/[\s\-_/]/g, '');
+    // Normalize spaces, slashes, and contract suffixes (.P, PERP)
+    let cleanSym = rawClean
+      .replace(/\.P$/i, '')
+      .replace(/PERP$/i, '')
+      .replace(/[\s\-_/]/g, '');
 
     // Check if it's crypto and try real-time Binance feed
     const isCrypto =
       cleanSym.endsWith('USDT') ||
       cleanSym.endsWith('USD') ||
       cleanSym.endsWith('BTC') ||
-      ['ALICE', 'BTC', 'ETH', 'SOL', 'BNB', 'DOGE', 'XRP', 'ADA', 'PEPE', 'SHIB', 'SUI', 'AVAX', 'NEAR', 'LINK'].includes(cleanSym);
+      INSTRUMENT_REGISTRY[cleanSym]?.assetClass === 'Crypto' ||
+      ['ALICE', 'MAGMA', 'GTC', 'BTC', 'ETH', 'SOL', 'BNB', 'DOGE', 'XRP', 'ADA', 'PEPE', 'SHIB', 'SUI', 'AVAX', 'NEAR', 'LINK'].includes(cleanSym);
 
     if (isCrypto) {
       const pair = cleanSym.endsWith('USDT')

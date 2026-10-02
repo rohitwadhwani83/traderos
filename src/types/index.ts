@@ -177,6 +177,7 @@ export interface MarketAnalysis {
   screenshotUrl?: string;
   chartUrl?: string;
   analyzedAt: string;
+  mtfData?: any;
 }
 
 export interface PerformanceMetrics {

@@ -96,8 +96,14 @@ export const AnalyseView: React.FC = () => {
 
   const handleInstrumentFormSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (selectedInstrument.trim()) {
-      runInstrumentAnalysis(selectedInstrument.trim());
+    const val = selectedInstrument.trim();
+    if (!val) return;
+    if (val.startsWith('http') || val.includes('tradingview.com') || val.includes('binance.com')) {
+      setMethod('url');
+      setUrlInput(val);
+      processChartUrl(val);
+    } else {
+      runInstrumentAnalysis(val);
     }
   };
 
@@ -108,15 +114,17 @@ export const AnalyseView: React.FC = () => {
 
   // Handle URL Parse & Auto-Analysis
   const processChartUrl = async (urlToTest: string, explicitSymbol?: string) => {
-    if (!urlToTest.trim()) return;
+    const trimmed = urlToTest.trim();
+    if (!trimmed) return;
     setError(null);
     setUrlFallbackPrompt(false);
-    // 1. Immediately put previous analysis away!
+
+    // 1. Immediately wipe previous analysis completely!
     setAnalysis(null);
     setMtfData(null);
     setIsLoading(true);
 
-    const parsed = parseChartUrl(urlToTest);
+    const parsed = parseChartUrl(trimmed);
     setUrlMessage(parsed.message);
 
     // Initial check: explicit argument > user symbol input > parsed from URL
@@ -126,37 +134,50 @@ export const AnalyseView: React.FC = () => {
       setUrlSnapshotUrl(parsed.snapshotUrl);
       setScreenshotData(parsed.snapshotUrl); // Keep in sync
 
-      // If symbol is not yet known from the URL string, auto-fetch from snapshot metadata!
-      if (!target && urlToTest.includes('tradingview.com/x/')) {
+      // If symbol is not yet known from the URL string, auto-fetch from snapshot metadata with strict timeout!
+      if (!target && trimmed.includes('tradingview.com/x/')) {
         setUrlMessage('Extracting instrument metadata from TradingView chart snapshot...');
-        const info = await fetchTradingViewSnapshotInfo(urlToTest);
-        if (info?.symbol) {
-          target = info.symbol.replace(/\.P$/i, '').toUpperCase();
-          if (info.imageUrl) {
-            setUrlSnapshotUrl(info.imageUrl);
-            setScreenshotData(info.imageUrl);
+        try {
+          const info = await fetchTradingViewSnapshotInfo(trimmed);
+          if (info?.symbol) {
+            target = info.symbol.replace(/\.P$/i, '').replace(/PERP$/i, '').toUpperCase();
+            if (info.imageUrl) {
+              setUrlSnapshotUrl(info.imageUrl);
+              setScreenshotData(info.imageUrl);
+            }
           }
+        } catch {
+          // Timeout or error - proceed immediately to smart fallback
         }
       }
 
-      if (target) {
-        setSelectedInstrument(target);
-        setScreenshotInstrument(target);
-        setFallbackSymbol(target);
-        setUrlSymbolInput(target);
-        addRecent(target);
-
-        // Render fresh AI analysis automatically!
-        await triggerScreenshotAnalysis(
-          parsed.snapshotUrl,
-          target,
-          '15m'
-        );
-      } else {
-        // Fallback only if metadata is completely unreachable
-        setIsLoading(false);
-        setUrlFallbackPrompt(true);
+      // If target is STILL not resolved, do NOT leave the user with an empty screen!
+      // Fall back intelligently to active instrument, recent instrument, or MAGMA USDT
+      if (!target) {
+        if (selectedInstrument && selectedInstrument !== 'NIFTY') {
+          target = selectedInstrument;
+        } else if (recents.length > 0 && recents[0] !== 'NIFTY') {
+          target = recents[0];
+        } else {
+          target = 'MAGMA USDT';
+        }
       }
+
+      // Show the 1-click switcher bar so user can toggle in 1 click
+      setUrlFallbackPrompt(true);
+
+      setSelectedInstrument(target);
+      setScreenshotInstrument(target);
+      setFallbackSymbol(target);
+      setUrlSymbolInput(target);
+      addRecent(target);
+
+      // Render fresh AI analysis automatically!
+      await triggerScreenshotAnalysis(
+        parsed.snapshotUrl,
+        target,
+        '15m'
+      );
       return;
     }
 
@@ -169,14 +190,20 @@ export const AnalyseView: React.FC = () => {
       addRecent(target);
       await runInstrumentAnalysis(target);
     } else {
-      setIsLoading(false);
+      const fallback = selectedInstrument || (recents.length > 0 ? recents[0] : 'MAGMA USDT');
+      setSelectedInstrument(fallback);
+      setUrlSymbolInput(fallback);
+      addRecent(fallback);
       setUrlFallbackPrompt(true);
+      await runInstrumentAnalysis(fallback);
     }
   };
 
   const handleUrlSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    await processChartUrl(urlInput);
+    if (urlInput.trim()) {
+      await processChartUrl(urlInput.trim(), urlSymbolInput.trim() || undefined);
+    }
   };
 
   // Trigger Screenshot Analysis
@@ -195,17 +222,20 @@ export const AnalyseView: React.FC = () => {
         userSpecifiedTimeframe: tf,
       });
       setAnalysis(generated);
-
-      const quote = await marketDataProvider.getQuote(cleanSym);
-      const mtf = await marketDataProvider.getMultiTimeframeData(quote.symbol);
-      setMtfData(mtf);
+      if (generated.mtfData) {
+        setMtfData(generated.mtfData);
+      } else {
+        const quote = await marketDataProvider.getQuote(cleanSym);
+        const mtf = await marketDataProvider.getMultiTimeframeData(quote.symbol);
+        setMtfData(mtf);
+      }
 
       // Auto-scroll directly to results
       setTimeout(() => {
         resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }, 150);
     } catch (err: any) {
-      setError('We could not reliably read this chart. Please ensure the screenshot is clear.');
+      setError(`Failed to analyze ${cleanSym}. ${err?.message || 'Please ensure the instrument is supported or try uploading a chart screenshot.'}`);
     } finally {
       setIsLoading(false);
     }
@@ -352,6 +382,15 @@ export const AnalyseView: React.FC = () => {
                   placeholder="Enter symbol (e.g. ALICE USDT, BTCUSDT, HDFCBANK)..."
                   value={selectedInstrument}
                   onChange={(e) => setSelectedInstrument(e.target.value.toUpperCase())}
+                  onPaste={(e) => {
+                    const pasted = e.clipboardData.getData('text').trim();
+                    if (pasted && (pasted.startsWith('http') || pasted.includes('tradingview') || pasted.includes('binance'))) {
+                      e.preventDefault();
+                      setMethod('url');
+                      setUrlInput(pasted);
+                      processChartUrl(pasted);
+                    }
+                  }}
                   className="w-full bg-[#161d2c] border border-slate-700/80 rounded-xl pl-9 pr-9 py-2 text-xs text-white uppercase focus:outline-none focus:border-indigo-500 font-mono"
                 />
                 <button
@@ -658,21 +697,21 @@ export const AnalyseView: React.FC = () => {
               </div>
             )}
 
-            {/* Symbol Confirmation & Selection Prompt within URL Tab */}
+            {/* 1-Click Instrument Switcher Banner within URL Tab */}
             {urlFallbackPrompt && (
-              <div className="p-3.5 rounded-xl bg-[#0a0f1d] border border-amber-500/30 space-y-3">
-                <div>
-                  <p className="text-xs text-amber-300 font-semibold">
-                    Select or Enter Instrument for Setup Analysis:
-                  </p>
-                  <p className="text-[11px] text-slate-400 mt-0.5">
-                    TradingView snapshot images keep the symbol private in the link. Click your instrument below or enter the symbol to analyze:
-                  </p>
+              <div className="p-3.5 rounded-xl bg-gradient-to-r from-[#0d1527] to-[#121028] border border-indigo-500/30 space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-amber-400 animate-pulse" />
+                    <span className="text-xs text-slate-200 font-semibold">
+                      Analysing <span className="font-mono text-amber-300 font-bold">{selectedInstrument || fallbackSymbol || 'MAGMA USDT'}</span> from Chart
+                    </span>
+                  </div>
+                  <span className="text-[11px] text-slate-400">1-Click Switch Instrument:</span>
                 </div>
 
                 {/* Quick suggestions */}
                 <div className="flex flex-wrap items-center gap-1.5">
-                  <span className="text-[10px] text-slate-500">Quick Select:</span>
                   {['MAGMA USDT', 'GTCUSDT', 'ALICE USDT', 'BTCUSDT', 'NIFTY', 'BANKNIFTY'].map((sym) => (
                     <button
                       key={sym}
@@ -692,7 +731,7 @@ export const AnalyseView: React.FC = () => {
                       className={`px-2.5 py-1 rounded-lg text-xs font-mono font-semibold border transition-all ${
                         fallbackSymbol === sym || selectedInstrument === sym
                           ? 'bg-amber-500/25 text-amber-300 border-amber-500/60 shadow-sm'
-                          : 'bg-[#141b2a] text-slate-300 border-slate-700/80 hover:text-white'
+                          : 'bg-[#141b2a] text-slate-300 border-slate-700/80 hover:text-white hover:border-slate-500'
                       }`}
                     >
                       {sym}
@@ -703,12 +742,27 @@ export const AnalyseView: React.FC = () => {
                 <div className="flex items-center gap-2">
                   <input
                     type="text"
-                    placeholder="e.g. MAGMA USDT, GTCUSDT, ALICE USDT, BTCUSDT, NIFTY"
+                    placeholder="Switch symbol (e.g. MAGMA USDT, GTCUSDT, BTCUSDT)..."
                     value={fallbackSymbol}
                     onChange={(e) => {
                       const val = e.target.value.toUpperCase();
                       setFallbackSymbol(val);
                       setUrlSymbolInput(val);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && fallbackSymbol.trim()) {
+                        e.preventDefault();
+                        const clean = fallbackSymbol.trim().toUpperCase();
+                        setSelectedInstrument(clean);
+                        setScreenshotInstrument(clean);
+                        setUrlSymbolInput(clean);
+                        addRecent(clean);
+                        if (urlSnapshotUrl) {
+                          triggerScreenshotAnalysis(urlSnapshotUrl, clean, '15m');
+                        } else {
+                          runInstrumentAnalysis(clean);
+                        }
+                      }
                     }}
                     className="flex-1 bg-[#161d2c] border border-slate-700/80 rounded-xl px-3 py-1.5 text-xs text-white uppercase font-mono focus:outline-none focus:border-indigo-500"
                   />
@@ -731,8 +785,8 @@ export const AnalyseView: React.FC = () => {
                     }}
                     className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-semibold shadow-sm flex items-center gap-1.5 transition-all"
                   >
-                    <Sparkles className="w-3.5 h-3.5" />
-                    <span>{urlSnapshotUrl ? `Analyse ${fallbackSymbol || 'Chart'} →` : 'Analyse Symbol →'}</span>
+                    <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+                    <span>Switch &amp; Re-analyse →</span>
                   </button>
                 </div>
               </div>
