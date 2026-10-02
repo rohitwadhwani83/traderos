@@ -20,7 +20,10 @@ import {
   CheckCircle2,
   Clock,
   ArrowRight,
+  Star,
 } from 'lucide-react';
+import { useRecentAndFavoriteInstruments } from '../../hooks/useRecentAndFavoriteInstruments';
+import { QuickInstrumentChips } from './QuickInstrumentChips';
 
 type InputMethod = 'instrument' | 'screenshot' | 'url';
 
@@ -41,14 +44,25 @@ export const AnalyseView: React.FC = () => {
 
   const resultsRef = useRef<HTMLDivElement>(null);
 
+  const {
+    recents,
+    favorites,
+    addRecent,
+    toggleFavorite,
+    isFavorite,
+    removeRecent,
+  } = useRecentAndFavoriteInstruments();
+
   // Fetch analysis for selected instrument
   const runInstrumentAnalysis = async (symbol: string) => {
     if (!symbol.trim()) return;
+    const cleanSym = symbol.trim().toUpperCase();
+    addRecent(cleanSym);
     setIsLoading(true);
     setError(null);
     setUrlMessage(null);
     try {
-      const quote = await marketDataProvider.getQuote(symbol);
+      const quote = await marketDataProvider.getQuote(cleanSym);
       const technicals = await marketDataProvider.getTechnicalData(quote.symbol);
       const mtf = await marketDataProvider.getMultiTimeframeData(quote.symbol);
 
@@ -126,17 +140,19 @@ export const AnalyseView: React.FC = () => {
 
   // Trigger Screenshot Analysis
   const triggerScreenshotAnalysis = async (imgUrl: string, sym: string, tf: string) => {
+    const cleanSym = (sym.trim() || 'ALICE USDT').toUpperCase();
+    addRecent(cleanSym);
     setIsLoading(true);
     setError(null);
     try {
       const generated = await analyzeChartScreenshot({
         imageFileOrDataUrl: imgUrl,
-        userSpecifiedInstrument: sym.trim() || 'ALICE USDT',
+        userSpecifiedInstrument: cleanSym,
         userSpecifiedTimeframe: tf,
       });
       setAnalysis(generated);
 
-      const quote = await marketDataProvider.getQuote(sym);
+      const quote = await marketDataProvider.getQuote(cleanSym);
       const mtf = await marketDataProvider.getMultiTimeframeData(quote.symbol);
       setMtfData(mtf);
 
@@ -148,6 +164,20 @@ export const AnalyseView: React.FC = () => {
       setError('We could not reliably read this chart. Please ensure the screenshot is clear.');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // 1-Click chip selection handler
+  const handleSelectChip = (sym: string) => {
+    const cleanSym = sym.trim().toUpperCase();
+    setSelectedInstrument(cleanSym);
+    setScreenshotInstrument(cleanSym);
+    addRecent(cleanSym);
+
+    if (method === 'screenshot' && screenshotData) {
+      triggerScreenshotAnalysis(screenshotData, cleanSym, screenshotTimeframe);
+    } else {
+      runInstrumentAnalysis(cleanSym);
     }
   };
 
@@ -182,6 +212,17 @@ export const AnalyseView: React.FC = () => {
         <h3 className="text-sm font-semibold text-slate-200">
           What do you want to analyse?
         </h3>
+
+        {/* Real-time Last 5 Used & TradingView-Style Favorites */}
+        <QuickInstrumentChips
+          currentSymbol={method === 'screenshot' ? screenshotInstrument : selectedInstrument}
+          recents={recents}
+          favorites={favorites}
+          onSelect={handleSelectChip}
+          onToggleFavorite={toggleFavorite}
+          onRemoveRecent={removeRecent}
+          isFavorite={isFavorite}
+        />
 
         <div className="grid grid-cols-3 gap-2 p-1 rounded-xl bg-[#090d16] border border-slate-800 text-xs">
           <button
@@ -267,8 +308,16 @@ export const AnalyseView: React.FC = () => {
                   placeholder="Enter symbol (e.g. ALICE USDT, BTCUSDT, HDFCBANK)..."
                   value={selectedInstrument}
                   onChange={(e) => setSelectedInstrument(e.target.value.toUpperCase())}
-                  className="w-full bg-[#161d2c] border border-slate-700/80 rounded-xl pl-9 pr-3 py-2 text-xs text-white uppercase focus:outline-none focus:border-indigo-500 font-mono"
+                  className="w-full bg-[#161d2c] border border-slate-700/80 rounded-xl pl-9 pr-9 py-2 text-xs text-white uppercase focus:outline-none focus:border-indigo-500 font-mono"
                 />
+                <button
+                  type="button"
+                  title={isFavorite(selectedInstrument) ? 'Remove from favourites' : 'Add to favourites'}
+                  onClick={() => toggleFavorite(selectedInstrument)}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-amber-400 transition-colors"
+                >
+                  <Star className={`w-3.5 h-3.5 ${isFavorite(selectedInstrument) ? 'fill-amber-400 text-amber-400' : 'text-slate-500'}`} />
+                </button>
               </div>
               <button
                 type="submit"
@@ -291,13 +340,23 @@ export const AnalyseView: React.FC = () => {
                 <label className="text-xs text-slate-300 font-medium whitespace-nowrap">
                   Instrument / Pair:
                 </label>
-                <input
-                  type="text"
-                  placeholder="e.g. ALICE USDT, BTCUSDT, NIFTY"
-                  value={screenshotInstrument}
-                  onChange={(e) => setScreenshotInstrument(e.target.value.toUpperCase())}
-                  className="bg-[#161d2c] border border-slate-700/80 rounded-xl px-3 py-1.5 text-xs text-white uppercase font-mono w-44 focus:outline-none focus:border-indigo-500"
-                />
+                <div className="relative flex items-center">
+                  <input
+                    type="text"
+                    placeholder="e.g. ALICE USDT, BTCUSDT, NIFTY"
+                    value={screenshotInstrument}
+                    onChange={(e) => setScreenshotInstrument(e.target.value.toUpperCase())}
+                    className="bg-[#161d2c] border border-slate-700/80 rounded-xl pl-3 pr-8 py-1.5 text-xs text-white uppercase font-mono w-44 focus:outline-none focus:border-indigo-500"
+                  />
+                  <button
+                    type="button"
+                    title={isFavorite(screenshotInstrument) ? 'Remove from favourites' : 'Add to favourites'}
+                    onClick={() => toggleFavorite(screenshotInstrument)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 text-slate-400 hover:text-amber-400 transition-colors"
+                  >
+                    <Star className={`w-3.5 h-3.5 ${isFavorite(screenshotInstrument) ? 'fill-amber-400 text-amber-400' : 'text-slate-500'}`} />
+                  </button>
+                </div>
               </div>
 
               <div className="flex items-center gap-1.5">
