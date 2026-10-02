@@ -23,7 +23,22 @@ describe('Chart URL Parser', () => {
     const result = parseChartUrl('https://charts.example.com/unsupported');
     expect(result.isValid).toBe(false);
     expect(result.requiresFallback).toBe(true);
-    expect(result.message).toContain('does not provide direct market data');
+    expect(result.message).toContain('symbol could not be identified automatically');
+  });
+
+  it('parses Binance trade URLs correctly', () => {
+    const result = parseChartUrl('https://www.binance.com/en/trade/ALICE_USDT');
+    expect(result.isValid).toBe(true);
+    expect(result.provider).toBe('Binance');
+    expect(result.symbol).toBe('ALICEUSDT');
+    expect(result.assetClass).toBe('Crypto');
+  });
+
+  it('parses TradingView snapshot URLs correctly', () => {
+    const result = parseChartUrl('https://www.tradingview.com/x/abcd1234/');
+    expect(result.isValid).toBe(true);
+    expect(result.isSnapshot).toBe(true);
+    expect(result.snapshotUrl).toContain('snapshots');
   });
 
   it('handles empty string gracefully', () => {

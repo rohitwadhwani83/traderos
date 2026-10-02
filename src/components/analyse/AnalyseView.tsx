@@ -84,19 +84,44 @@ export const AnalyseView: React.FC = () => {
     }
   };
 
-  // Handle URL Parse
-  const handleUrlSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!urlInput.trim()) return;
+  const [urlFallbackPrompt, setUrlFallbackPrompt] = useState<boolean>(false);
+  const [fallbackSymbol, setFallbackSymbol] = useState<string>('ALICE USDT');
 
-    const parsed = parseChartUrl(urlInput);
+  // Handle URL Parse & Auto-Analysis
+  const processChartUrl = async (urlToTest: string) => {
+    if (!urlToTest.trim()) return;
+    setError(null);
+    setUrlFallbackPrompt(false);
+
+    const parsed = parseChartUrl(urlToTest);
     setUrlMessage(parsed.message);
+
+    if (parsed.isSnapshot && parsed.snapshotUrl) {
+      setScreenshotData(parsed.snapshotUrl);
+      setMethod('screenshot');
+      await triggerScreenshotAnalysis(
+        parsed.snapshotUrl,
+        parsed.normalizedInstrument || screenshotInstrument,
+        screenshotTimeframe
+      );
+      return;
+    }
 
     if (parsed.normalizedInstrument && !parsed.requiresFallback) {
       setSelectedInstrument(parsed.normalizedInstrument);
       setScreenshotInstrument(parsed.normalizedInstrument);
       await runInstrumentAnalysis(parsed.normalizedInstrument);
+    } else {
+      setUrlFallbackPrompt(true);
+      if (parsed.symbol) {
+        setFallbackSymbol(parsed.symbol);
+      }
     }
+  };
+
+  const handleUrlSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await processChartUrl(urlInput);
   };
 
   // Trigger Screenshot Analysis
@@ -390,20 +415,62 @@ export const AnalyseView: React.FC = () => {
 
         {/* METHOD 3: URL Paste */}
         {method === 'url' && (
-          <form onSubmit={handleUrlSubmit} className="space-y-3">
-            <div className="flex gap-2">
+          <div className="space-y-4">
+            <form onSubmit={handleUrlSubmit} className="flex gap-2">
               <input
                 type="text"
-                placeholder="Paste TradingView URL (e.g. https://www.tradingview.com/chart/?symbol=NSE:NIFTY)"
+                placeholder="Paste TradingView, Binance, or Chart URL (e.g. https://www.tradingview.com/chart/?symbol=BINANCE:ALICEUSDT)"
                 value={urlInput}
                 onChange={(e) => setUrlInput(e.target.value)}
-                className="flex-1 bg-[#161d2c] border border-slate-700/80 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500"
+                className="flex-1 bg-[#161d2c] border border-slate-700/80 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500 font-mono"
               />
               <button
                 type="submit"
-                className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-sm"
+                disabled={isLoading || !urlInput.trim()}
+                className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-semibold shadow-sm flex items-center gap-1.5 transition-all"
               >
-                Inspect URL
+                <Search className="w-3.5 h-3.5" />
+                <span>{isLoading ? 'Inspecting...' : 'Inspect URL'}</span>
+              </button>
+            </form>
+
+            {/* Quick 1-Click Test Examples */}
+            <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-400">
+              <span>Quick Test Examples:</span>
+              <button
+                type="button"
+                onClick={() => {
+                  const url = 'https://www.tradingview.com/chart/?symbol=BINANCE:ALICEUSDT';
+                  setUrlInput(url);
+                  processChartUrl(url);
+                }}
+                className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-indigo-300 font-mono transition-colors"
+              >
+                TradingView: ALICE/USDT
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  const url = 'https://www.tradingview.com/chart/?symbol=NSE:NIFTY';
+                  setUrlInput(url);
+                  processChartUrl(url);
+                }}
+                className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-indigo-300 font-mono transition-colors"
+              >
+                TradingView: NIFTY 50
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  const url = 'https://www.binance.com/en/trade/ALICE_USDT';
+                  setUrlInput(url);
+                  processChartUrl(url);
+                }}
+                className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-indigo-300 font-mono transition-colors"
+              >
+                Binance: ALICE/USDT
               </button>
             </div>
 
@@ -413,7 +480,37 @@ export const AnalyseView: React.FC = () => {
                 <span>{urlMessage}</span>
               </div>
             )}
-          </form>
+
+            {urlFallbackPrompt && (
+              <div className="p-3.5 rounded-xl bg-[#0a0f1d] border border-amber-500/30 space-y-2">
+                <p className="text-xs text-amber-300 font-medium">
+                  Confirm instrument symbol to complete setup analysis:
+                </p>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    placeholder="e.g. ALICE USDT, BTCUSDT, NIFTY"
+                    value={fallbackSymbol}
+                    onChange={(e) => setFallbackSymbol(e.target.value.toUpperCase())}
+                    className="flex-1 bg-[#161d2c] border border-slate-700/80 rounded-xl px-3 py-1.5 text-xs text-white uppercase font-mono focus:outline-none focus:border-indigo-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (fallbackSymbol.trim()) {
+                        setSelectedInstrument(fallbackSymbol.trim());
+                        setScreenshotInstrument(fallbackSymbol.trim());
+                        runInstrumentAnalysis(fallbackSymbol.trim());
+                      }
+                    }}
+                    className="px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-sm flex items-center gap-1.5"
+                  >
+                    <span>Analyse Symbol →</span>
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         )}
       </div>
 

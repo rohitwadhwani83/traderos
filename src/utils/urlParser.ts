@@ -3,11 +3,13 @@ import { AssetClass } from '../types';
 export interface ParsedChartUrl {
   isValid: boolean;
   rawUrl: string;
-  provider: 'TradingView' | 'YahooFinance' | 'GenericChart' | 'Unknown';
+  provider: 'TradingView' | 'Binance' | 'YahooFinance' | 'GenericChart' | 'Unknown';
   exchange?: string;
   symbol?: string;
   assetClass?: AssetClass;
   normalizedInstrument?: string;
+  isSnapshot?: boolean;
+  snapshotUrl?: string;
   message: string;
   requiresFallback: boolean;
 }
@@ -32,19 +34,21 @@ const KNOWN_INSTRUMENTS: Record<string, { assetClass: AssetClass; canonical: str
   ETHUSDT: { assetClass: 'Crypto', canonical: 'ETHUSDT' },
   SOLUSDT: { assetClass: 'Crypto', canonical: 'SOLUSDT' },
   BNBUSDT: { assetClass: 'Crypto', canonical: 'BNBUSDT' },
+  ALICEUSDT: { assetClass: 'Crypto', canonical: 'ALICEUSDT' },
   BTC: { assetClass: 'Crypto', canonical: 'BTCUSDT' },
   ETH: { assetClass: 'Crypto', canonical: 'ETHUSDT' },
+  ALICE: { assetClass: 'Crypto', canonical: 'ALICEUSDT' },
 };
 
 /**
- * Parses a TradingView or financial chart URL safely without scraping.
+ * Parses a TradingView, Binance, or financial chart URL safely.
  */
 export function parseChartUrl(urlStr: string): ParsedChartUrl {
-  const trimmed = urlStr.trim();
-  if (!trimmed) {
+  const decoded = decodeURIComponent(urlStr.trim());
+  if (!decoded) {
     return {
       isValid: false,
-      rawUrl: trimmed,
+      rawUrl: decoded,
       provider: 'Unknown',
       message: 'Please enter a valid chart URL.',
       requiresFallback: true,
@@ -52,15 +56,44 @@ export function parseChartUrl(urlStr: string): ParsedChartUrl {
   }
 
   try {
-    const url = new URL(trimmed.startsWith('http') ? trimmed : `https://${trimmed}`);
+    const url = new URL(decoded.startsWith('http') ? decoded : `https://${decoded}`);
     const host = url.hostname.toLowerCase();
+    const pathname = url.pathname;
 
-    // 1. TradingView URLs
+    // 1. Image Snapshot Direct Link (e.g. .png, .jpg, .webp)
+    if (/\.(png|jpg|jpeg|webp)$/i.test(pathname) || host.includes('snapshots') || host.includes('imgur')) {
+      return {
+        isValid: true,
+        rawUrl: decoded,
+        provider: 'GenericChart',
+        isSnapshot: true,
+        snapshotUrl: decoded,
+        message: 'Direct chart snapshot image detected. Analyzing visual price action...',
+        requiresFallback: false,
+      };
+    }
+
+    // 2. TradingView URLs
     if (host.includes('tradingview.com')) {
+      // Pattern 2a: Snapshot link (/x/ID/)
+      if (pathname.includes('/x/')) {
+        const match = pathname.match(/\/x\/([A-Za-z0-9]+)/);
+        const snapshotId = match ? match[1] : '';
+        return {
+          isValid: true,
+          rawUrl: decoded,
+          provider: 'TradingView',
+          isSnapshot: true,
+          snapshotUrl: snapshotId ? `https://s3.tradingview.com/snapshots/${snapshotId[0].toLowerCase()}/${snapshotId}.png` : decoded,
+          message: 'TradingView Snapshot link detected. Loading chart visual for AI inspection...',
+          requiresFallback: false,
+        };
+      }
+
       let symbol = '';
       let exchange = '';
 
-      // Pattern A: ?symbol=NSE:NIFTY or ?symbol=BINANCE:BTCUSDT
+      // Pattern 2b: ?symbol=NSE:NIFTY or ?symbol=BINANCE:ALICEUSDT or ?symbol=ALICEUSDT
       const symbolParam = url.searchParams.get('symbol');
       if (symbolParam) {
         if (symbolParam.includes(':')) {
@@ -72,9 +105,9 @@ export function parseChartUrl(urlStr: string): ParsedChartUrl {
         }
       }
 
-      // Pattern B: /symbols/BTCUSDT/ or /symbols/NSE-NIFTY/
-      if (!symbol && url.pathname.includes('/symbols/')) {
-        const match = url.pathname.match(/\/symbols\/([^/]+)/);
+      // Pattern 2c: /symbols/BTCUSDT/ or /symbols/BINANCE-ALICEUSDT/ or /symbols/NSE-NIFTY/
+      if (!symbol && pathname.includes('/symbols/')) {
+        const match = pathname.match(/\/symbols\/([^/]+)/);
         if (match && match[1]) {
           const token = match[1].toUpperCase();
           if (token.includes('-')) {
@@ -91,55 +124,104 @@ export function parseChartUrl(urlStr: string): ParsedChartUrl {
         }
       }
 
-      // Pattern C: /chart/ID/?symbol=...
-      if (!symbol && url.pathname.includes('/chart/')) {
+      // Pattern 2d: /chart/ID/?symbol=...
+      if (!symbol && pathname.includes('/chart/')) {
         const querySymbol = url.searchParams.get('symbol');
         if (querySymbol) {
-          symbol = querySymbol.replace(/^[A-Z0-9]+:/, '').toUpperCase();
+          symbol = querySymbol.replace(/^[A-Z0-9]+:/i, '').toUpperCase();
+        } else {
+          // Check if symbol is in slug: /chart/ID-ALICEUSDT-breakout/
+          const slugMatch = pathname.match(/\/chart\/[^/]+-([A-Z0-9]+)/i);
+          if (slugMatch && slugMatch[1]) {
+            symbol = slugMatch[1].toUpperCase();
+          }
         }
       }
 
       if (symbol) {
         const cleanSymbol = symbol.replace(/[^A-Z0-9]/g, '');
         const matched = KNOWN_INSTRUMENTS[cleanSymbol];
+        const isCrypto =
+          cleanSymbol.endsWith('USDT') ||
+          cleanSymbol.endsWith('USD') ||
+          cleanSymbol.endsWith('BTC') ||
+          matched?.assetClass === 'Crypto';
+
+        const assetClass: AssetClass = matched?.assetClass || (isCrypto ? 'Crypto' : 'Indian Equities');
+        const canonical = matched?.canonical || cleanSymbol;
 
         return {
           isValid: true,
-          rawUrl: trimmed,
+          rawUrl: decoded,
           provider: 'TradingView',
-          exchange: exchange || (matched?.assetClass === 'Crypto' ? 'BINANCE' : 'NSE'),
+          exchange: exchange || (isCrypto ? 'BINANCE' : 'NSE'),
           symbol: cleanSymbol,
-          assetClass: matched?.assetClass || 'Indian Equities',
-          normalizedInstrument: matched?.canonical || cleanSymbol,
-          message:
-            'We identified the instrument from the TradingView URL. Loading market analysis through our data provider layer.',
+          assetClass,
+          normalizedInstrument: canonical,
+          message: `Identified ${canonical} from TradingView URL. Loading real-time market analysis...`,
           requiresFallback: false,
         };
       }
 
       return {
         isValid: true,
-        rawUrl: trimmed,
+        rawUrl: decoded,
         provider: 'TradingView',
-        message:
-          'TradingView URL detected, but specific symbol could not be extracted automatically. Please enter the instrument manually or upload a chart screenshot.',
+        message: 'TradingView chart link recognized. Please confirm the instrument below to run analysis.',
         requiresFallback: true,
       };
     }
 
-    // 2. Generic financial chart URL
+    // 3. Binance URLs (e.g. binance.com/en/trade/ALICE_USDT)
+    if (host.includes('binance.com')) {
+      const tradeMatch = pathname.match(/\/trade\/([A-Za-z0-9_]+)/i) || pathname.match(/\/futures\/([A-Za-z0-9_]+)/i);
+      if (tradeMatch && tradeMatch[1]) {
+        const rawPair = tradeMatch[1].replace(/_/g, '').toUpperCase();
+        return {
+          isValid: true,
+          rawUrl: decoded,
+          provider: 'Binance',
+          exchange: 'BINANCE',
+          symbol: rawPair,
+          assetClass: 'Crypto',
+          normalizedInstrument: rawPair,
+          message: `Identified Binance Spot pair ${rawPair}. Connecting to live 24/7 public orderflow feed...`,
+          requiresFallback: false,
+        };
+      }
+    }
+
+    // 4. Yahoo Finance URLs (e.g. finance.yahoo.com/quote/^NSEI or ALICE-USD)
+    if (host.includes('yahoo.com')) {
+      const match = pathname.match(/\/quote\/([^/?#]+)/i);
+      if (match && match[1]) {
+        const sym = match[1].replace(/^[^\w]/, '').replace(/\.NS$/i, '').replace(/-USD$/i, 'USDT').toUpperCase();
+        const matched = KNOWN_INSTRUMENTS[sym];
+        return {
+          isValid: true,
+          rawUrl: decoded,
+          provider: 'YahooFinance',
+          symbol: sym,
+          assetClass: matched?.assetClass || 'Indian Equities',
+          normalizedInstrument: matched?.canonical || sym,
+          message: `Identified ${sym} from Yahoo Finance. Loading market data...`,
+          requiresFallback: false,
+        };
+      }
+    }
+
+    // 5. Generic fallback
     return {
       isValid: false,
-      rawUrl: trimmed,
+      rawUrl: decoded,
       provider: 'GenericChart',
-      message:
-        'We identified the chart link, but the URL does not provide direct market data. Please select the instrument directly or upload a chart screenshot.',
+      message: 'Chart link recognized, but symbol could not be identified automatically. Enter the instrument below to analyze.',
       requiresFallback: true,
     };
   } catch {
     return {
       isValid: false,
-      rawUrl: trimmed,
+      rawUrl: decoded,
       provider: 'Unknown',
       message: "We couldn't identify a supported instrument from this URL. Please enter the symbol directly.",
       requiresFallback: true,
