@@ -58,6 +58,9 @@ export const AnalyseView: React.FC = () => {
     if (!symbol.trim()) return;
     const cleanSym = symbol.trim().toUpperCase();
     addRecent(cleanSym);
+    // Explicitly reset prior analysis so fresh insights load with clear visual feedback
+    setAnalysis(null);
+    setMtfData(null);
     setIsLoading(true);
     setError(null);
     setUrlMessage(null);
@@ -107,6 +110,10 @@ export const AnalyseView: React.FC = () => {
     if (!urlToTest.trim()) return;
     setError(null);
     setUrlFallbackPrompt(false);
+    // Clear old analysis so the user never sees stale previous instrument data
+    setAnalysis(null);
+    setMtfData(null);
+    setIsLoading(true);
 
     const parsed = parseChartUrl(urlToTest);
     setUrlMessage(parsed.message);
@@ -115,34 +122,38 @@ export const AnalyseView: React.FC = () => {
       setUrlSnapshotUrl(parsed.snapshotUrl);
       setScreenshotData(parsed.snapshotUrl); // Keep in sync
 
-      if (parsed.normalizedInstrument && !parsed.requiresFallback) {
-        setSelectedInstrument(parsed.normalizedInstrument);
-        setScreenshotInstrument(parsed.normalizedInstrument);
-        addRecent(parsed.normalizedInstrument);
-        await triggerScreenshotAnalysis(
-          parsed.snapshotUrl,
-          parsed.normalizedInstrument,
-          '15m'
-        );
-      } else {
-        setUrlFallbackPrompt(true);
-        const initialSym = parsed.symbol || 'GTCUSDT';
-        setFallbackSymbol(initialSym);
-      }
+      const targetSym = (parsed.normalizedInstrument || parsed.symbol || fallbackSymbol || 'GTCUSDT').toUpperCase();
+      setSelectedInstrument(targetSym);
+      setScreenshotInstrument(targetSym);
+      setFallbackSymbol(targetSym);
+      addRecent(targetSym);
+
+      // ALWAYS automatically trigger fresh analysis immediately!
+      await triggerScreenshotAnalysis(
+        parsed.snapshotUrl,
+        targetSym,
+        '15m'
+      );
+
+      // Keep quick switch chips available in case the chart belongs to another pair
+      setUrlFallbackPrompt(true);
       return;
     }
 
     if (parsed.normalizedInstrument && !parsed.requiresFallback) {
       setUrlSnapshotUrl(null);
+      setUrlFallbackPrompt(false);
       setSelectedInstrument(parsed.normalizedInstrument);
       setScreenshotInstrument(parsed.normalizedInstrument);
       addRecent(parsed.normalizedInstrument);
       await runInstrumentAnalysis(parsed.normalizedInstrument);
     } else {
       setUrlFallbackPrompt(true);
-      if (parsed.symbol) {
-        setFallbackSymbol(parsed.symbol);
-      }
+      const targetSym = (parsed.symbol || fallbackSymbol || 'GTCUSDT').toUpperCase();
+      setFallbackSymbol(targetSym);
+      setSelectedInstrument(targetSym);
+      addRecent(targetSym);
+      await runInstrumentAnalysis(targetSym);
     }
   };
 
@@ -153,8 +164,11 @@ export const AnalyseView: React.FC = () => {
 
   // Trigger Screenshot Analysis
   const triggerScreenshotAnalysis = async (imgUrl: string, sym: string, tf: string) => {
-    const cleanSym = (sym.trim() || 'ALICE USDT').toUpperCase();
+    const cleanSym = (sym.trim() || 'GTCUSDT').toUpperCase();
     addRecent(cleanSym);
+    // Explicitly reset prior analysis so fresh insights load with clear visual feedback
+    setAnalysis(null);
+    setMtfData(null);
     setIsLoading(true);
     setError(null);
     try {
@@ -698,13 +712,14 @@ export const AnalyseView: React.FC = () => {
       {!isLoading && analysis && (
         <div className="space-y-6">
           {/* Multi-Timeframe Alignment Grid */}
-          {mtfData && <MultiTimeframeGrid mtf={mtfData} />}
+          {mtfData && <MultiTimeframeGrid key={`mtf-${analysis.id}`} mtf={mtfData} />}
 
           {/* Standard 16-point Analysis Card */}
-          <AnalysisResultCard analysis={analysis} />
+          <AnalysisResultCard key={`res-${analysis.id}`} analysis={analysis} />
 
           {/* Integrated Risk Calculator */}
           <RiskCalculator
+            key={`risk-${analysis.id}`}
             initialEntry={analysis.entryZone.min}
             initialStop={analysis.invalidation}
             initialTarget={analysis.targetZone.target1}
@@ -712,7 +727,7 @@ export const AnalyseView: React.FC = () => {
           />
 
           {/* Saved Trade Plans ("Planned vs Actual") */}
-          <TradePlansList />
+          <TradePlansList key={`plans-${analysis.id}`} />
         </div>
       )}
     </div>
