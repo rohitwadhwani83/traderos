@@ -246,3 +246,41 @@ export function parseChartUrl(urlStr: string): ParsedChartUrl {
     };
   }
 }
+
+/**
+ * Asynchronously fetches metadata for a TradingView snapshot link (e.g. /x/ID/).
+ * Extracts the exact instrument ticker and snapshot image.
+ */
+export async function fetchTradingViewSnapshotInfo(
+  urlStr: string
+): Promise<{ symbol?: string; imageUrl?: string; title?: string } | null> {
+  try {
+    const encoded = encodeURIComponent(urlStr.trim());
+    const res = await fetch(`https://api.microlink.io/?url=${encoded}`, {
+      headers: { Accept: 'application/json' },
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    if (json.status !== 'success' || !json.data) return null;
+
+    const title: string = json.data.title || '';
+    const imageUrl: string = json.data.image?.url || '';
+
+    let symbol: string | undefined;
+    if (title) {
+      const match = title.match(/(?:([A-Z0-9]+):)?([A-Z0-9_]+)(?:\.[A-Z0-9]+)?\s+Chart Image/i);
+      if (match && match[2]) {
+        symbol = match[2].toUpperCase();
+      }
+    }
+
+    return {
+      symbol,
+      imageUrl,
+      title,
+    };
+  } catch {
+    return null;
+  }
+}
+

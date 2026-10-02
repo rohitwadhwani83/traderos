@@ -41,6 +41,13 @@ describe('Chart URL Parser', () => {
     expect(result.snapshotUrl).toContain('snapshots');
   });
 
+  it('parses TradingView snapshot with explicit symbol parameter correctly', () => {
+    const result = parseChartUrl('https://www.tradingview.com/x/e0CIWLuq/?symbol=BINANCE:MAGMAUSDT');
+    expect(result.isValid).toBe(true);
+    expect(result.isSnapshot).toBe(true);
+    expect(result.symbol).toBe('MAGMAUSDT');
+  });
+
   it('handles empty string gracefully', () => {
     const result = parseChartUrl('');
     expect(result.isValid).toBe(false);

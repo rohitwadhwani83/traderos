@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { marketDataProvider, INSTRUMENT_REGISTRY } from '../../services/marketData/provider';
 import { generateMarketAnalysis } from '../../services/ai/marketAnalysis';
 import { analyzeChartScreenshot } from '../../services/ai/screenshotAnalysis';
-import { parseChartUrl } from '../../utils/urlParser';
+import { parseChartUrl, fetchTradingViewSnapshotInfo } from '../../utils/urlParser';
 import { MarketAnalysis } from '../../types';
 import { MultiTimeframeGrid } from './MultiTimeframeGrid';
 import { AnalysisResultCard } from './AnalysisResultCard';
@@ -111,36 +111,49 @@ export const AnalyseView: React.FC = () => {
     if (!urlToTest.trim()) return;
     setError(null);
     setUrlFallbackPrompt(false);
-    // Clear old analysis so the user never sees stale previous instrument data
+    // 1. Immediately put previous analysis away!
     setAnalysis(null);
     setMtfData(null);
+    setIsLoading(true);
 
     const parsed = parseChartUrl(urlToTest);
     setUrlMessage(parsed.message);
 
-    // Determine target symbol: explicit argument > user symbol input > parsed normalized instrument > parsed symbol
-    const target = (explicitSymbol || urlSymbolInput || parsed.normalizedInstrument || parsed.symbol || '').trim().toUpperCase();
+    // Initial check: explicit argument > user symbol input > parsed from URL
+    let target = (explicitSymbol || urlSymbolInput || parsed.normalizedInstrument || parsed.symbol || '').trim().toUpperCase();
 
     if (parsed.isSnapshot && parsed.snapshotUrl) {
       setUrlSnapshotUrl(parsed.snapshotUrl);
       setScreenshotData(parsed.snapshotUrl); // Keep in sync
 
+      // If symbol is not yet known from the URL string, auto-fetch from snapshot metadata!
+      if (!target && urlToTest.includes('tradingview.com/x/')) {
+        setUrlMessage('Extracting instrument metadata from TradingView chart snapshot...');
+        const info = await fetchTradingViewSnapshotInfo(urlToTest);
+        if (info?.symbol) {
+          target = info.symbol.replace(/\.P$/i, '').toUpperCase();
+          if (info.imageUrl) {
+            setUrlSnapshotUrl(info.imageUrl);
+            setScreenshotData(info.imageUrl);
+          }
+        }
+      }
+
       if (target) {
-        setIsLoading(true);
         setSelectedInstrument(target);
         setScreenshotInstrument(target);
         setFallbackSymbol(target);
         setUrlSymbolInput(target);
         addRecent(target);
 
+        // Render fresh AI analysis automatically!
         await triggerScreenshotAnalysis(
           parsed.snapshotUrl,
           target,
           '15m'
         );
-        setUrlFallbackPrompt(true);
       } else {
-        // No symbol provided or detected from URL yet - show snapshot preview & prominent selection chips
+        // Fallback only if metadata is completely unreachable
         setIsLoading(false);
         setUrlFallbackPrompt(true);
       }
@@ -148,7 +161,6 @@ export const AnalyseView: React.FC = () => {
     }
 
     if (target) {
-      setIsLoading(true);
       setUrlSnapshotUrl(null);
       setUrlFallbackPrompt(false);
       setSelectedInstrument(target);
@@ -515,6 +527,13 @@ export const AnalyseView: React.FC = () => {
                   placeholder="Paste TradingView, Binance, or Chart URL (e.g. https://www.tradingview.com/x/e0CIWLuq/)"
                   value={urlInput}
                   onChange={(e) => setUrlInput(e.target.value)}
+                  onPaste={(e) => {
+                    const pasted = e.clipboardData.getData('text');
+                    if (pasted && (pasted.startsWith('http') || pasted.includes('tradingview') || pasted.includes('binance'))) {
+                      setUrlInput(pasted);
+                      processChartUrl(pasted);
+                    }
+                  }}
                   className="w-full bg-[#161d2c] border border-slate-700/80 rounded-xl pl-9 pr-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500 font-mono"
                 />
               </div>
