@@ -79,14 +79,28 @@ export function parseChartUrl(urlStr: string): ParsedChartUrl {
       if (pathname.includes('/x/')) {
         const match = pathname.match(/\/x\/([A-Za-z0-9]+)/);
         const snapshotId = match ? match[1] : '';
+        const snapshotUrl = snapshotId
+          ? `https://s3.tradingview.com/snapshots/${snapshotId[0].toLowerCase()}/${snapshotId}.png`
+          : decoded;
+
+        // Check if query parameter has symbol
+        let detectedSymbol = url.searchParams.get('symbol') || '';
+        if (detectedSymbol.includes(':')) {
+          detectedSymbol = detectedSymbol.split(':')[1];
+        }
+
         return {
           isValid: true,
           rawUrl: decoded,
           provider: 'TradingView',
           isSnapshot: true,
-          snapshotUrl: snapshotId ? `https://s3.tradingview.com/snapshots/${snapshotId[0].toLowerCase()}/${snapshotId}.png` : decoded,
-          message: 'TradingView Snapshot link detected. Loading chart visual for AI inspection...',
-          requiresFallback: false,
+          snapshotUrl,
+          symbol: detectedSymbol ? detectedSymbol.toUpperCase() : undefined,
+          normalizedInstrument: detectedSymbol ? detectedSymbol.toUpperCase() : undefined,
+          message: detectedSymbol
+            ? `TradingView Snapshot detected for ${detectedSymbol.toUpperCase()}. Running setup analysis...`
+            : 'TradingView Snapshot image loaded! Confirm or select the instrument below to analyze.',
+          requiresFallback: !detectedSymbol,
         };
       }
 

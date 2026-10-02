@@ -17,9 +17,9 @@ export async function analyzeChartScreenshot(
 ): Promise<MarketAnalysis> {
   const { imageFileOrDataUrl, userSpecifiedInstrument, userSpecifiedTimeframe } = input;
 
-  // Validate image existence and size
-  if (!imageFileOrDataUrl || imageFileOrDataUrl.length < 100) {
-    throw new Error('Invalid image data. Please upload a clear chart screenshot.');
+  // Validate image existence and size (handles base64 data URLs as well as http/https image URLs)
+  if (!imageFileOrDataUrl || (imageFileOrDataUrl.startsWith('data:') ? imageFileOrDataUrl.length < 50 : imageFileOrDataUrl.length < 8)) {
+    throw new Error('Invalid image data. Please provide a clear chart screenshot or valid image link.');
   }
 
   // Determine instrument and timeframe

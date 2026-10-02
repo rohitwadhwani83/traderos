@@ -99,7 +99,8 @@ export const AnalyseView: React.FC = () => {
   };
 
   const [urlFallbackPrompt, setUrlFallbackPrompt] = useState<boolean>(false);
-  const [fallbackSymbol, setFallbackSymbol] = useState<string>('ALICE USDT');
+  const [fallbackSymbol, setFallbackSymbol] = useState<string>('GTCUSDT');
+  const [urlSnapshotUrl, setUrlSnapshotUrl] = useState<string | null>(null);
 
   // Handle URL Parse & Auto-Analysis
   const processChartUrl = async (urlToTest: string) => {
@@ -111,19 +112,31 @@ export const AnalyseView: React.FC = () => {
     setUrlMessage(parsed.message);
 
     if (parsed.isSnapshot && parsed.snapshotUrl) {
-      setScreenshotData(parsed.snapshotUrl);
-      setMethod('screenshot');
-      await triggerScreenshotAnalysis(
-        parsed.snapshotUrl,
-        parsed.normalizedInstrument || screenshotInstrument,
-        screenshotTimeframe
-      );
+      setUrlSnapshotUrl(parsed.snapshotUrl);
+      setScreenshotData(parsed.snapshotUrl); // Keep in sync
+
+      if (parsed.normalizedInstrument && !parsed.requiresFallback) {
+        setSelectedInstrument(parsed.normalizedInstrument);
+        setScreenshotInstrument(parsed.normalizedInstrument);
+        addRecent(parsed.normalizedInstrument);
+        await triggerScreenshotAnalysis(
+          parsed.snapshotUrl,
+          parsed.normalizedInstrument,
+          '15m'
+        );
+      } else {
+        setUrlFallbackPrompt(true);
+        const initialSym = parsed.symbol || 'GTCUSDT';
+        setFallbackSymbol(initialSym);
+      }
       return;
     }
 
     if (parsed.normalizedInstrument && !parsed.requiresFallback) {
+      setUrlSnapshotUrl(null);
       setSelectedInstrument(parsed.normalizedInstrument);
       setScreenshotInstrument(parsed.normalizedInstrument);
+      addRecent(parsed.normalizedInstrument);
       await runInstrumentAnalysis(parsed.normalizedInstrument);
     } else {
       setUrlFallbackPrompt(true);
@@ -499,6 +512,18 @@ export const AnalyseView: React.FC = () => {
               <button
                 type="button"
                 onClick={() => {
+                  const url = 'https://www.tradingview.com/x/n1NmKXVv/';
+                  setUrlInput(url);
+                  processChartUrl(url);
+                }}
+                className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-amber-300 font-mono transition-colors"
+              >
+                Snapshot: TV /x/n1NmKXVv/
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
                   const url = 'https://www.tradingview.com/chart/?symbol=BINANCE:ALICEUSDT';
                   setUrlInput(url);
                   processChartUrl(url);
@@ -540,31 +565,104 @@ export const AnalyseView: React.FC = () => {
               </div>
             )}
 
+            {/* Embedded Snapshot Preview within URL Tab */}
+            {urlSnapshotUrl && (
+              <div className="rounded-xl border border-indigo-500/30 bg-[#0d121f] p-3 space-y-2.5">
+                <div className="flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                    <span className="font-semibold text-white">TradingView Snapshot Preview</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setUrlSnapshotUrl(null);
+                      setUrlFallbackPrompt(false);
+                    }}
+                    className="text-[11px] text-slate-400 hover:text-rose-400 transition-colors"
+                  >
+                    Clear Preview
+                  </button>
+                </div>
+                <div className="rounded-lg overflow-hidden bg-black/60 border border-slate-800 max-h-64 flex items-center justify-center p-1.5">
+                  <img
+                    src={urlSnapshotUrl}
+                    alt="Chart Snapshot Preview"
+                    className="max-h-60 max-w-full object-contain rounded"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Symbol Confirmation Prompt within URL Tab */}
             {urlFallbackPrompt && (
-              <div className="p-3.5 rounded-xl bg-[#0a0f1d] border border-amber-500/30 space-y-2">
-                <p className="text-xs text-amber-300 font-medium">
-                  Confirm instrument symbol to complete setup analysis:
-                </p>
+              <div className="p-3.5 rounded-xl bg-[#0a0f1d] border border-amber-500/30 space-y-3">
+                <div>
+                  <p className="text-xs text-amber-300 font-semibold">
+                    Confirm Instrument for Setup Analysis:
+                  </p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    TradingView snapshot images keep the symbol private in the link. Select or confirm the symbol to complete analysis:
+                  </p>
+                </div>
+
+                {/* Quick suggestions */}
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="text-[10px] text-slate-500">Quick Select:</span>
+                  {['GTCUSDT', 'ALICE USDT', 'BTCUSDT', 'NIFTY', 'BANKNIFTY'].map((sym) => (
+                    <button
+                      key={sym}
+                      type="button"
+                      onClick={() => {
+                        setFallbackSymbol(sym);
+                        setSelectedInstrument(sym);
+                        setScreenshotInstrument(sym);
+                        addRecent(sym);
+                        if (urlSnapshotUrl) {
+                          triggerScreenshotAnalysis(urlSnapshotUrl, sym, '15m');
+                        } else {
+                          runInstrumentAnalysis(sym);
+                        }
+                      }}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-mono font-semibold border transition-all ${
+                        fallbackSymbol === sym
+                          ? 'bg-indigo-600/30 text-indigo-300 border-indigo-500'
+                          : 'bg-[#141b2a] text-slate-300 border-slate-700/80 hover:text-white'
+                      }`}
+                    >
+                      {sym}
+                    </button>
+                  ))}
+                </div>
+
                 <div className="flex items-center gap-2">
                   <input
                     type="text"
-                    placeholder="e.g. ALICE USDT, BTCUSDT, NIFTY"
+                    placeholder="e.g. GTCUSDT, ALICE USDT, BTCUSDT, NIFTY"
                     value={fallbackSymbol}
                     onChange={(e) => setFallbackSymbol(e.target.value.toUpperCase())}
                     className="flex-1 bg-[#161d2c] border border-slate-700/80 rounded-xl px-3 py-1.5 text-xs text-white uppercase font-mono focus:outline-none focus:border-indigo-500"
                   />
                   <button
                     type="button"
+                    disabled={isLoading || !fallbackSymbol.trim()}
                     onClick={() => {
                       if (fallbackSymbol.trim()) {
-                        setSelectedInstrument(fallbackSymbol.trim());
-                        setScreenshotInstrument(fallbackSymbol.trim());
-                        runInstrumentAnalysis(fallbackSymbol.trim());
+                        const clean = fallbackSymbol.trim().toUpperCase();
+                        setSelectedInstrument(clean);
+                        setScreenshotInstrument(clean);
+                        addRecent(clean);
+                        if (urlSnapshotUrl) {
+                          triggerScreenshotAnalysis(urlSnapshotUrl, clean, '15m');
+                        } else {
+                          runInstrumentAnalysis(clean);
+                        }
                       }
                     }}
-                    className="px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-sm flex items-center gap-1.5"
+                    className="px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-semibold shadow-sm flex items-center gap-1.5 transition-all"
                   >
-                    <span>Analyse Symbol →</span>
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>{urlSnapshotUrl ? 'Analyse Chart Snapshot →' : 'Analyse Symbol →'}</span>
                   </button>
                 </div>
               </div>
