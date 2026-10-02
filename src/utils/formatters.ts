@@ -17,17 +17,21 @@ export function formatCurrency(
   }
 
   if (currency === 'USD') {
+    const minDec = absAmount < 1 ? 4 : absAmount % 1 === 0 ? 0 : 2;
+    const maxDec = absAmount < 0.01 ? 6 : absAmount < 1 ? 4 : 2;
     const formatted = new Intl.NumberFormat('en-US', {
-      minimumFractionDigits: absAmount % 1 === 0 ? 0 : 2,
-      maximumFractionDigits: 2,
+      minimumFractionDigits: minDec,
+      maximumFractionDigits: maxDec,
     }).format(absAmount);
     return `${sign}$${formatted}`;
   }
 
   // USDT
+  const minDec = absAmount < 1 ? 4 : 2;
+  const maxDec = absAmount < 0.01 ? 6 : absAmount < 1 ? 4 : 2;
   const formatted = new Intl.NumberFormat('en-US', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 4,
+    minimumFractionDigits: minDec,
+    maximumFractionDigits: maxDec,
   }).format(absAmount);
   return `${sign}${formatted} USDT`;
 }

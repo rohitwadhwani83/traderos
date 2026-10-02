@@ -147,6 +147,15 @@ const INSTRUMENT_REGISTRY: Record<string, InstrumentConfig> = {
     volatility: 3.2,
     exchange: 'BINANCE',
   },
+  ALICEUSDT: {
+    symbol: 'ALICEUSDT',
+    name: 'MyNeighborAlice / Tether Spot',
+    assetClass: 'Crypto',
+    basePrice: 0.1948,
+    tickSize: 0.0001,
+    volatility: 4.2,
+    exchange: 'BINANCE',
+  },
 };
 
 export class DefaultMarketDataProvider implements MarketDataProvider {
@@ -187,30 +196,89 @@ export class DefaultMarketDataProvider implements MarketDataProvider {
     return 'CLOSED';
   }
 
+  async fetchBinanceTicker(pair: string): Promise<MarketQuote | null> {
+    try {
+      const res = await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${pair}`);
+      if (!res.ok) return null;
+      const data = await res.json();
+      const currentPrice = parseFloat(data.lastPrice);
+      const change = parseFloat(data.priceChange);
+      const changePercent = parseFloat(data.priceChangePercent);
+      const sessionHigh = parseFloat(data.highPrice);
+      const sessionLow = parseFloat(data.lowPrice);
+      const open = parseFloat(data.openPrice);
+      const previousClose = parseFloat(data.prevClosePrice);
+      const volume = parseFloat(data.volume);
+
+      return {
+        symbol: pair,
+        instrumentName: `${pair} 24/7 Spot`,
+        assetClass: 'Crypto',
+        price: currentPrice,
+        change,
+        changePercent,
+        sessionHigh,
+        sessionLow,
+        open,
+        previousClose,
+        volume,
+        marketStatus: 'OPEN',
+        dataQuality: 'LIVE',
+        dataSource: 'Binance Live 24/7 Public Spot Feed',
+        timestamp: new Date().toLocaleTimeString('en-US', { hour12: false }),
+      };
+    } catch {
+      return null;
+    }
+  }
+
   async getQuote(symbolQuery: string): Promise<MarketQuote> {
-    const cleanSym = symbolQuery.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    const rawClean = symbolQuery.toUpperCase().trim();
+    // Normalize spaces and slashes: 'ALICE USDT' -> 'ALICEUSDT', 'ALICE/USDT' -> 'ALICEUSDT'
+    let cleanSym = rawClean.replace(/[\s\-_/]/g, '');
+
+    // Check if it's crypto and try real-time Binance feed
+    const isCrypto =
+      cleanSym.endsWith('USDT') ||
+      cleanSym.endsWith('USD') ||
+      cleanSym.endsWith('BTC') ||
+      ['ALICE', 'BTC', 'ETH', 'SOL', 'BNB', 'DOGE', 'XRP', 'ADA', 'PEPE', 'SHIB', 'SUI', 'AVAX', 'NEAR', 'LINK'].includes(cleanSym);
+
+    if (isCrypto) {
+      const pair = cleanSym.endsWith('USDT')
+        ? cleanSym
+        : cleanSym.endsWith('USD')
+        ? `${cleanSym}T`
+        : `${cleanSym}USDT`;
+
+      const live = await this.fetchBinanceTicker(pair);
+      if (live) return live;
+    }
+
     const config = INSTRUMENT_REGISTRY[cleanSym] || {
       symbol: cleanSym || 'NIFTY',
       name: `${cleanSym} Instrument`,
-      assetClass: 'Indian Equities' as AssetClass,
-      basePrice: 1000,
-      tickSize: 0.05,
+      assetClass: (cleanSym.includes('USDT') || cleanSym.includes('CRYPTO') ? 'Crypto' : 'Indian Equities') as AssetClass,
+      basePrice: cleanSym.includes('USDT') ? 0.1948 : 1000,
+      tickSize: cleanSym.includes('USDT') ? 0.0001 : 0.05,
       volatility: 1.0,
-      exchange: 'NSE',
+      exchange: cleanSym.includes('USDT') ? 'BINANCE' : 'NSE',
     };
 
     const marketStatus = this.getMarketStatus(config.assetClass);
     const dataQuality: DataQualityType = marketStatus === 'OPEN' ? 'LIVE' : 'DELAYED';
-    
+    const precision = config.basePrice < 0.01 ? 6 : config.basePrice < 1 ? 4 : config.basePrice < 10 ? 3 : 2;
+    const round = (n: number) => Number(n.toFixed(precision));
+
     // Deterministic realistic calculation with slight jitter
-    const priceChange = Number((config.basePrice * (config.volatility / 100) * 0.42).toFixed(2));
-    const currentPrice = Number((config.basePrice + priceChange).toFixed(2));
+    const priceChange = round(config.basePrice * (config.volatility / 100) * 0.42);
+    const currentPrice = round(config.basePrice + priceChange);
     const previousClose = config.basePrice;
-    const change = Number((currentPrice - previousClose).toFixed(2));
+    const change = round(currentPrice - previousClose);
     const changePercent = Number(((change / previousClose) * 100).toFixed(2));
-    const sessionHigh = Number((Math.max(currentPrice, previousClose) * 1.008).toFixed(2));
-    const sessionLow = Number((Math.min(currentPrice, previousClose) * 0.994).toFixed(2));
-    const open = Number((previousClose * 1.002).toFixed(2));
+    const sessionHigh = round(Math.max(currentPrice, previousClose) * 1.008);
+    const sessionLow = round(Math.min(currentPrice, previousClose) * 0.994);
+    const open = round(previousClose * 1.002);
 
     const now = new Date();
     const timestampStr = now.toLocaleTimeString('en-US', { hour12: false });
@@ -234,8 +302,42 @@ export class DefaultMarketDataProvider implements MarketDataProvider {
     };
   }
 
+  async fetchBinanceCandles(pair: string, timeframe: string, count: number = 30): Promise<Candle[] | null> {
+    try {
+      const intervalMap: Record<string, string> = {
+        '5m': '5m',
+        '15m': '15m',
+        '1h': '1h',
+        '4h': '4h',
+        '1d': '1d',
+      };
+      const interval = intervalMap[timeframe] || '15m';
+      const res = await fetch(`https://api.binance.com/api/v3/klines?symbol=${pair}&interval=${interval}&limit=${count}`);
+      if (!res.ok) return null;
+      const data = await res.json();
+      return data.map((k: any) => ({
+        timestamp: new Date(k[0]).toISOString(),
+        open: parseFloat(k[1]),
+        high: parseFloat(k[2]),
+        low: parseFloat(k[3]),
+        close: parseFloat(k[4]),
+        volume: parseFloat(k[5]),
+      }));
+    } catch {
+      return null;
+    }
+  }
+
   async getHistoricalCandles(symbol: string, timeframe: string, count: number = 30): Promise<Candle[]> {
     const quote = await this.getQuote(symbol);
+    if (quote.assetClass === 'Crypto') {
+      const liveCandles = await this.fetchBinanceCandles(quote.symbol, timeframe, count);
+      if (liveCandles && liveCandles.length > 0) return liveCandles;
+    }
+
+    const precision = quote.price < 0.01 ? 6 : quote.price < 1 ? 4 : quote.price < 10 ? 3 : 2;
+    const round = (n: number) => Number(n.toFixed(precision));
+
     const candles: Candle[] = [];
     let currentClose = quote.previousClose;
     const now = Date.now();
@@ -244,10 +346,10 @@ export class DefaultMarketDataProvider implements MarketDataProvider {
     for (let i = count; i >= 0; i--) {
       const time = new Date(now - i * stepMs).toISOString();
       const delta = (Math.sin(i / 3) + Math.cos(i / 5)) * (quote.price * 0.003);
-      const open = Number(currentClose.toFixed(2));
-      const close = Number((currentClose + delta).toFixed(2));
-      const high = Number((Math.max(open, close) + Math.abs(delta) * 0.6).toFixed(2));
-      const low = Number((Math.min(open, close) - Math.abs(delta) * 0.6).toFixed(2));
+      const open = round(currentClose);
+      const close = round(currentClose + delta);
+      const high = round(Math.max(open, close) + Math.abs(delta) * 0.6);
+      const low = round(Math.min(open, close) - Math.abs(delta) * 0.6);
       const volume = Math.floor(1000 + Math.abs(delta) * 500);
 
       candles.push({
@@ -268,25 +370,27 @@ export class DefaultMarketDataProvider implements MarketDataProvider {
   async getTechnicalData(symbol: string): Promise<TechnicalIndicators> {
     const quote = await this.getQuote(symbol);
     const price = quote.price;
+    const precision = price < 0.01 ? 6 : price < 1 ? 4 : price < 10 ? 3 : 2;
+    const round = (n: number) => Number(n.toFixed(precision));
 
-    const ema20 = Number((price * 0.994).toFixed(2));
-    const ema50 = Number((price * 0.985).toFixed(2));
-    const ema200 = Number((price * 0.962).toFixed(2));
-    const atr14 = Number((price * 0.012).toFixed(2));
-    const vwap = Number((price * 0.997).toFixed(2));
+    const ema20 = round(price * 0.994);
+    const ema50 = round(price * 0.985);
+    const ema200 = round(price * 0.962);
+    const atr14 = round(price * 0.025);
+    const vwap = round(price * 0.997);
 
-    const pdh = Number((quote.previousClose * 1.011).toFixed(2));
-    const pdl = Number((quote.previousClose * 0.989).toFixed(2));
+    const pdh = round(quote.sessionHigh || quote.previousClose * 1.011);
+    const pdl = round(quote.sessionLow || quote.previousClose * 0.989);
 
     const supportLevels = [
-      Number((price * 0.99).toFixed(2)),
-      Number((price * 0.975).toFixed(2)),
-      Number((price * 0.96).toFixed(2)),
+      round(price * 0.985),
+      round(price * 0.96),
+      round(price * 0.935),
     ];
     const resistanceLevels = [
-      Number((price * 1.012).toFixed(2)),
-      Number((price * 1.025).toFixed(2)),
-      Number((price * 1.04).toFixed(2)),
+      round(price * 1.018),
+      round(price * 1.045),
+      round(price * 1.075),
     ];
 
     const isUptrend = price > ema50 && ema50 > ema200;
@@ -299,9 +403,9 @@ export class DefaultMarketDataProvider implements MarketDataProvider {
       ema200,
       rsi14: isUptrend ? 58.4 : 46.2,
       macd: {
-        macdLine: Number((price * 0.002).toFixed(2)),
-        signalLine: Number((price * 0.0015).toFixed(2)),
-        histogram: Number((price * 0.0005).toFixed(2)),
+        macdLine: round(price * 0.002),
+        signalLine: round(price * 0.0015),
+        histogram: round(price * 0.0005),
       },
       atr14,
       vwap,

@@ -40,10 +40,13 @@ export function generateMarketAnalysis(input: MarketAnalysisInput): MarketAnalys
     setupType = 'Sideways compression without edge';
   }
 
+  const precision = price < 0.01 ? 6 : price < 1 ? 4 : price < 10 ? 3 : 2;
+  const round = (n: number) => Number(n.toFixed(precision));
+
   // Calculate mathematical zones from verified support/resistance & ATR
-  const primarySupport = technicals.supportLevels[0] || Number((price * 0.99).toFixed(2));
-  const primaryResistance = technicals.resistanceLevels[0] || Number((price * 1.015).toFixed(2));
-  const atr = technicals.atr14;
+  const primarySupport = technicals.supportLevels[0] || round(price * 0.985);
+  const primaryResistance = technicals.resistanceLevels[0] || round(price * 1.02);
+  const atr = technicals.atr14 || round(price * 0.025);
 
   let entryMin = 0;
   let entryMax = 0;
@@ -54,30 +57,30 @@ export function generateMarketAnalysis(input: MarketAnalysisInput): MarketAnalys
 
   if (bias === 'BULLISH') {
     entryMin = primarySupport;
-    entryMax = Number((primarySupport + atr * 0.4).toFixed(2));
-    invalidation = Number((primarySupport - atr * 0.8).toFixed(2));
+    entryMax = round(primarySupport + atr * 0.4);
+    invalidation = round(primarySupport - atr * 0.8);
     target1 = primaryResistance;
-    target2 = Number((primaryResistance + atr * 1.2).toFixed(2));
+    target2 = round(primaryResistance + atr * 1.2);
     const risk = entryMax - invalidation;
     const reward = target1 - entryMax;
     rrRatio = risk > 0 && reward > 0 ? Number((reward / risk).toFixed(2)) : 2.1;
   } else if (bias === 'BEARISH') {
-    entryMin = Number((primaryResistance - atr * 0.4).toFixed(2));
+    entryMin = round(primaryResistance - atr * 0.4);
     entryMax = primaryResistance;
-    invalidation = Number((primaryResistance + atr * 0.8).toFixed(2));
+    invalidation = round(primaryResistance + atr * 0.8);
     target1 = primarySupport;
-    target2 = Number((primarySupport - atr * 1.2).toFixed(2));
+    target2 = round(primarySupport - atr * 1.2);
     const risk = invalidation - entryMin;
     const reward = entryMin - target1;
     rrRatio = risk > 0 && reward > 0 ? Number((reward / risk).toFixed(2)) : 2.0;
   } else {
     entryMin = primarySupport;
-    entryMax = Number(((primarySupport + price) / 2).toFixed(2));
-    invalidation = Number((primarySupport * 0.995).toFixed(2));
+    entryMax = round((primarySupport + price) / 2);
+    invalidation = round(primarySupport - atr * 0.6);
     target1 = primaryResistance;
     const risk = Math.abs(entryMax - invalidation);
     const reward = Math.abs(target1 - entryMax);
-    rrRatio = risk > 0 ? Number((reward / risk).toFixed(2)) : 1.5;
+    rrRatio = risk > 0 && reward > 0 ? Number((reward / risk).toFixed(2)) : 1.8;
   }
 
   const confidence: ConfidenceLevel =

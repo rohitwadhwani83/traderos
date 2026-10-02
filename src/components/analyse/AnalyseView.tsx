@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { marketDataProvider, INSTRUMENT_REGISTRY } from '../../services/marketData/provider';
 import { generateMarketAnalysis } from '../../services/ai/marketAnalysis';
 import { analyzeChartScreenshot } from '../../services/ai/screenshotAnalysis';
@@ -17,6 +17,9 @@ import {
   AlertTriangle,
   RefreshCw,
   Info,
+  CheckCircle2,
+  Clock,
+  ArrowRight,
 } from 'lucide-react';
 
 type InputMethod = 'instrument' | 'screenshot' | 'url';
@@ -28,22 +31,26 @@ export const AnalyseView: React.FC = () => {
   const [urlMessage, setUrlMessage] = useState<string | null>(null);
 
   const [screenshotData, setScreenshotData] = useState<string | null>(null);
-  const [screenshotInstrument, setScreenshotInstrument] = useState<string>('NIFTY');
+  const [screenshotInstrument, setScreenshotInstrument] = useState<string>('ALICE USDT');
+  const [screenshotTimeframe, setScreenshotTimeframe] = useState<string>('5m');
 
   const [analysis, setAnalysis] = useState<MarketAnalysis | null>(null);
   const [mtfData, setMtfData] = useState<any | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
+  const resultsRef = useRef<HTMLDivElement>(null);
+
   // Fetch analysis for selected instrument
   const runInstrumentAnalysis = async (symbol: string) => {
+    if (!symbol.trim()) return;
     setIsLoading(true);
     setError(null);
     setUrlMessage(null);
     try {
       const quote = await marketDataProvider.getQuote(symbol);
-      const technicals = await marketDataProvider.getTechnicalData(symbol);
-      const mtf = await marketDataProvider.getMultiTimeframeData(symbol);
+      const technicals = await marketDataProvider.getTechnicalData(quote.symbol);
+      const mtf = await marketDataProvider.getMultiTimeframeData(quote.symbol);
 
       const generated = generateMarketAnalysis({
         quote,
@@ -53,18 +60,29 @@ export const AnalyseView: React.FC = () => {
 
       setMtfData(mtf);
       setAnalysis(generated);
+
+      // Smooth scroll to analysis results
+      setTimeout(() => {
+        resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 100);
     } catch (err: any) {
-      setError('Market data temporarily unavailable. You can still analyze an uploaded chart.');
+      setError(`Failed to retrieve live market data for "${symbol}". Please check the symbol or try uploading a chart screenshot.`);
     } finally {
       setIsLoading(false);
     }
   };
 
+  // Run initial analysis on first mount
   useEffect(() => {
-    if (method === 'instrument') {
-      runInstrumentAnalysis(selectedInstrument);
+    runInstrumentAnalysis('NIFTY');
+  }, []);
+
+  const handleInstrumentFormSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (selectedInstrument.trim()) {
+      runInstrumentAnalysis(selectedInstrument.trim());
     }
-  }, [selectedInstrument]);
+  };
 
   // Handle URL Parse
   const handleUrlSubmit = async (e: React.FormEvent) => {
@@ -76,7 +94,35 @@ export const AnalyseView: React.FC = () => {
 
     if (parsed.normalizedInstrument && !parsed.requiresFallback) {
       setSelectedInstrument(parsed.normalizedInstrument);
+      setScreenshotInstrument(parsed.normalizedInstrument);
       await runInstrumentAnalysis(parsed.normalizedInstrument);
+    }
+  };
+
+  // Trigger Screenshot Analysis
+  const triggerScreenshotAnalysis = async (imgUrl: string, sym: string, tf: string) => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const generated = await analyzeChartScreenshot({
+        imageFileOrDataUrl: imgUrl,
+        userSpecifiedInstrument: sym.trim() || 'ALICE USDT',
+        userSpecifiedTimeframe: tf,
+      });
+      setAnalysis(generated);
+
+      const quote = await marketDataProvider.getQuote(sym);
+      const mtf = await marketDataProvider.getMultiTimeframeData(quote.symbol);
+      setMtfData(mtf);
+
+      // Auto-scroll directly to results
+      setTimeout(() => {
+        resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 150);
+    } catch (err: any) {
+      setError('We could not reliably read this chart. Please ensure the screenshot is clear.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -89,21 +135,7 @@ export const AnalyseView: React.FC = () => {
     reader.onloadend = async () => {
       const dataUrl = reader.result as string;
       setScreenshotData(dataUrl);
-      setIsLoading(true);
-      setError(null);
-      try {
-        const generated = await analyzeChartScreenshot({
-          imageFileOrDataUrl: dataUrl,
-          userSpecifiedInstrument: screenshotInstrument,
-        });
-        setAnalysis(generated);
-        const mtf = await marketDataProvider.getMultiTimeframeData(screenshotInstrument);
-        setMtfData(mtf);
-      } catch (err: any) {
-        setError('We could not reliably read this chart. Please check image clarity.');
-      } finally {
-        setIsLoading(false);
-      }
+      await triggerScreenshotAnalysis(dataUrl, screenshotInstrument, screenshotTimeframe);
     };
     reader.readAsDataURL(file);
   };
@@ -113,10 +145,10 @@ export const AnalyseView: React.FC = () => {
       {/* Top Header */}
       <div>
         <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight">
-          Market Intelligence & Setup Analysis
+          Market Intelligence &amp; Setup Analysis
         </h1>
         <p className="text-xs text-slate-400 mt-1">
-          Objective multi-timeframe risk/reward assessment • Zero hallucinated prices
+          Objective multi-timeframe risk/reward assessment • Real-time live feeds &amp; AI chart structure inspection
         </p>
       </div>
 
@@ -167,99 +199,196 @@ export const AnalyseView: React.FC = () => {
           </button>
         </div>
 
-        {/* METHOD B: Instrument Picker */}
+        {/* METHOD 1: Instrument Picker & Live Search */}
         {method === 'instrument' && (
-          <div className="space-y-3">
+          <div className="space-y-3.5">
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-xs text-slate-400">Popular:</span>
-              {['NIFTY', 'BANKNIFTY', 'SENSEX', 'RELIANCE', 'TCS', 'GOLD', 'CRUDE OIL', 'BTCUSDT', 'ETHUSDT'].map(
-                (sym) => (
-                  <button
-                    key={sym}
-                    type="button"
-                    onClick={() => setSelectedInstrument(sym)}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all ${
-                      selectedInstrument === sym
-                        ? 'bg-indigo-600/20 text-indigo-400 border-indigo-500/40'
-                        : 'bg-[#161d2c] border-slate-700/80 text-slate-300 hover:text-white'
-                    }`}
-                  >
-                    {sym}
-                  </button>
-                )
-              )}
+              {[
+                'NIFTY',
+                'BANKNIFTY',
+                'RELIANCE',
+                'GOLD',
+                'CRUDE OIL',
+                'ALICE USDT',
+                'BTCUSDT',
+                'ETHUSDT',
+                'SOLUSDT',
+              ].map((sym) => (
+                <button
+                  key={sym}
+                  type="button"
+                  onClick={() => {
+                    setSelectedInstrument(sym);
+                    setScreenshotInstrument(sym);
+                    runInstrumentAnalysis(sym);
+                  }}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all ${
+                    selectedInstrument === sym
+                      ? 'bg-indigo-600/20 text-indigo-400 border-indigo-500/40'
+                      : 'bg-[#161d2c] border-slate-700/80 text-slate-300 hover:text-white'
+                  }`}
+                >
+                  {sym}
+                </button>
+              ))}
             </div>
 
-            <div className="flex items-center gap-2 max-w-sm">
-              <input
-                type="text"
-                placeholder="Or type symbol (e.g. HDFCBANK)..."
-                value={selectedInstrument}
-                onChange={(e) => setSelectedInstrument(e.target.value.toUpperCase())}
-                className="w-full bg-[#161d2c] border border-slate-700/80 rounded-xl px-3 py-2 text-xs text-white uppercase focus:outline-none focus:border-indigo-500 font-mono"
-              />
+            <form onSubmit={handleInstrumentFormSubmit} className="flex items-center gap-2 max-w-md">
+              <div className="relative flex-1">
+                <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="Enter symbol (e.g. ALICE USDT, BTCUSDT, HDFCBANK)..."
+                  value={selectedInstrument}
+                  onChange={(e) => setSelectedInstrument(e.target.value.toUpperCase())}
+                  className="w-full bg-[#161d2c] border border-slate-700/80 rounded-xl pl-9 pr-3 py-2 text-xs text-white uppercase focus:outline-none focus:border-indigo-500 font-mono"
+                />
+              </div>
               <button
-                onClick={() => runInstrumentAnalysis(selectedInstrument)}
-                className="p-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white"
-                title="Refresh Analysis"
+                type="submit"
+                disabled={isLoading}
+                className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-semibold shadow-sm transition-all flex items-center gap-1.5"
               >
-                <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+                <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+                <span>Analyse</span>
               </button>
-            </div>
+            </form>
           </div>
         )}
 
-        {/* METHOD A: Screenshot Upload */}
+        {/* METHOD 2: Screenshot Upload & AI Inspection */}
         {method === 'screenshot' && (
-          <div className="space-y-3">
-            <div className="flex items-center gap-3">
-              <input
-                type="text"
-                placeholder="Instrument Hint (e.g. NIFTY, BTC)"
-                value={screenshotInstrument}
-                onChange={(e) => setScreenshotInstrument(e.target.value.toUpperCase())}
-                className="bg-[#161d2c] border border-slate-700/80 rounded-xl px-3 py-1.5 text-xs text-white w-48 uppercase font-mono"
-              />
-              <span className="text-[11px] text-slate-400">
-                Helps AI anchor exact price ranges
-              </span>
-            </div>
-
-            <div className="border-2 border-dashed border-slate-800 hover:border-indigo-500/40 rounded-2xl p-6 text-center">
-              <Upload className="w-8 h-8 text-indigo-400 mx-auto mb-2" />
-              <p className="text-xs text-slate-300 font-medium">
-                Upload or paste TradingView / Broker chart screenshot
-              </p>
-              <p className="text-[11px] text-slate-500 mt-0.5 mb-3">
-                AI inspects trend structure, visible S/R, momentum, and risk/reward without hallucinating.
-              </p>
-              <label className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold cursor-pointer">
-                <span>Select Screenshot</span>
+          <div className="space-y-4">
+            {/* Instrument Hint & Timeframe Selector */}
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex items-center gap-2">
+                <label className="text-xs text-slate-300 font-medium whitespace-nowrap">
+                  Instrument / Pair:
+                </label>
                 <input
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={handleScreenshotUpload}
+                  type="text"
+                  placeholder="e.g. ALICE USDT, BTCUSDT, NIFTY"
+                  value={screenshotInstrument}
+                  onChange={(e) => setScreenshotInstrument(e.target.value.toUpperCase())}
+                  className="bg-[#161d2c] border border-slate-700/80 rounded-xl px-3 py-1.5 text-xs text-white uppercase font-mono w-44 focus:outline-none focus:border-indigo-500"
                 />
-              </label>
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <label className="text-xs text-slate-400 font-medium">Timeframe:</label>
+                {['5m', '15m', '1h', '4h', '1D'].map((tf) => (
+                  <button
+                    key={tf}
+                    type="button"
+                    onClick={() => setScreenshotTimeframe(tf)}
+                    className={`px-2 py-1 rounded-md text-[11px] font-mono font-medium border transition-colors ${
+                      screenshotTimeframe === tf
+                        ? 'bg-indigo-600 text-white border-indigo-500'
+                        : 'bg-[#161d2c] text-slate-400 border-slate-700/60 hover:text-white'
+                    }`}
+                  >
+                    {tf}
+                  </button>
+                ))}
+              </div>
+
+              {/* Quick suggestions */}
+              <div className="hidden lg:flex items-center gap-1.5 text-[11px] text-slate-400 ml-auto">
+                <span>Quick:</span>
+                {['ALICE USDT', 'BTCUSDT', 'NIFTY', 'BANKNIFTY'].map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => {
+                      setScreenshotInstrument(s);
+                      if (screenshotData) {
+                        triggerScreenshotAnalysis(screenshotData, s, screenshotTimeframe);
+                      }
+                    }}
+                    className="hover:text-indigo-400 underline decoration-slate-600"
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
             </div>
 
+            {/* When NO screenshot is uploaded yet: Show the Upload Box */}
+            {!screenshotData && (
+              <div className="border-2 border-dashed border-slate-800 hover:border-indigo-500/40 rounded-2xl p-7 text-center transition-all bg-[#0a0d14]/40">
+                <Upload className="w-8 h-8 text-indigo-400 mx-auto mb-2" />
+                <p className="text-xs text-slate-300 font-medium">
+                  Upload or paste TradingView / Broker chart screenshot
+                </p>
+                <p className="text-[11px] text-slate-500 mt-0.5 mb-3.5">
+                  AI reads candle orderflow, horizontal shelves, and calculates exact risk/reward.
+                </p>
+                <label className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold cursor-pointer shadow-md transition-all active:scale-95">
+                  <Upload className="w-3.5 h-3.5" />
+                  <span>Select Chart Screenshot</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleScreenshotUpload}
+                  />
+                </label>
+              </div>
+            )}
+
+            {/* When screenshot IS uploaded: Replace Upload Box with Focused Preview Card */}
             {screenshotData && (
-              <div className="p-3 rounded-xl bg-[#090d16] border border-slate-800">
-                <span className="text-xs font-semibold text-slate-300 block mb-2">
-                  Uploaded Chart Preview:
-                </span>
-                <img
-                  src={screenshotData}
-                  alt="Chart Preview"
-                  className="max-h-60 w-full object-contain rounded-lg bg-black"
-                />
+              <div className="rounded-2xl border border-indigo-500/30 bg-[#0d121f] p-4 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-800">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
+                    <span className="text-xs font-semibold text-white">Chart Uploaded &amp; Inspected</span>
+                    <span className="px-2 py-0.5 rounded-md bg-indigo-500/20 text-indigo-300 text-[10px] font-mono font-bold">
+                      {screenshotInstrument}
+                    </span>
+                    <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 text-[10px] font-mono">
+                      {screenshotTimeframe}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => triggerScreenshotAnalysis(screenshotData, screenshotInstrument, screenshotTimeframe)}
+                      disabled={isLoading}
+                      className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-sm transition-all flex items-center gap-1.5"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+                      <span>{isLoading ? 'Analysing...' : 'Re-analyse Chart'}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setScreenshotData(null);
+                        setAnalysis(null);
+                      }}
+                      className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-medium transition-colors"
+                    >
+                      Upload Different Chart
+                    </button>
+                  </div>
+                </div>
+
+                <div className="rounded-xl overflow-hidden bg-black/60 border border-slate-800 max-h-72 flex items-center justify-center p-2">
+                  <img
+                    src={screenshotData}
+                    alt="Uploaded Chart Preview"
+                    className="max-h-64 max-w-full object-contain rounded"
+                  />
+                </div>
               </div>
             )}
           </div>
         )}
 
-        {/* METHOD C: URL Paste */}
+        {/* METHOD 3: URL Paste */}
         {method === 'url' && (
           <form onSubmit={handleUrlSubmit} className="space-y-3">
             <div className="flex gap-2">
@@ -301,15 +430,17 @@ export const AnalyseView: React.FC = () => {
         <div className="p-12 text-center text-slate-400 rounded-2xl border border-slate-800 bg-[#101522]">
           <RefreshCw className="w-8 h-8 text-indigo-400 animate-spin mx-auto mb-3" />
           <p className="text-sm font-semibold text-slate-200">
-            Analyzing Market Structure & Risk Boundaries...
+            Analyzing Market Structure &amp; Risk Boundaries...
           </p>
           <p className="text-xs text-slate-500 mt-1">
-            Computing multi-timeframe alignment, ATR bands, and key invalidation levels.
+            Computing live tick depth, multi-timeframe alignment, and key invalidation levels.
           </p>
         </div>
       )}
 
-      {/* Main Analysis Display */}
+      {/* Main Analysis Display Anchor */}
+      <div ref={resultsRef} />
+
       {!isLoading && analysis && (
         <div className="space-y-6">
           {/* Multi-Timeframe Alignment Grid */}

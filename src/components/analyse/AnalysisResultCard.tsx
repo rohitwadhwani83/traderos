@@ -23,7 +23,11 @@ interface AnalysisResultCardProps {
 export const AnalysisResultCard: React.FC<AnalysisResultCardProps> = ({ analysis }) => {
   const { addTradePlan } = useTrading();
   const { user } = useAuth();
-  const currency = user.preferences.defaultCurrency;
+  const isCrypto =
+    analysis.assetClass === 'Crypto' ||
+    analysis.instrument.toUpperCase().includes('USDT') ||
+    analysis.instrument.toUpperCase().includes('USD');
+  const currency = isCrypto ? 'USDT' : user.preferences.defaultCurrency;
   const [isSaved, setIsSaved] = useState(false);
 
   const handleSaveAsPlan = () => {
