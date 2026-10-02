@@ -125,18 +125,18 @@ export const AnalyseView: React.FC = () => {
     setIsLoading(true);
 
     const parsed = parseChartUrl(trimmed);
-    setUrlMessage(parsed.message);
 
-    // Initial check: explicit argument > user symbol input > parsed from URL
-    let target = (explicitSymbol || urlSymbolInput || parsed.normalizedInstrument || parsed.symbol || '').trim().toUpperCase();
+    // CRITICAL: A newly tested URL should NEVER inherit a stale symbol from previous analyses.
+    // Only use explicitSymbol (if user specifically provided one) or the symbol extracted directly from URL.
+    let target = (explicitSymbol || parsed.normalizedInstrument || parsed.symbol || '').trim().toUpperCase();
 
     if (parsed.isSnapshot && parsed.snapshotUrl) {
       setUrlSnapshotUrl(parsed.snapshotUrl);
       setScreenshotData(parsed.snapshotUrl); // Keep in sync
 
-      // If symbol is not yet known from the URL string, auto-fetch from snapshot metadata with strict timeout!
+      // If symbol is not yet known from the URL string, perform live retrieval from TradingView!
       if (!target && trimmed.includes('tradingview.com/x/')) {
-        setUrlMessage('Extracting instrument metadata from TradingView chart snapshot...');
+        setUrlMessage('Connecting to TradingView live retrieval feed to detect instrument...');
         try {
           const info = await fetchTradingViewSnapshotInfo(trimmed);
           if (info?.symbol) {
@@ -147,37 +147,31 @@ export const AnalyseView: React.FC = () => {
             }
           }
         } catch {
-          // Timeout or error - proceed immediately to smart fallback
+          // Timeout or error - proceed to user selection without guessing
         }
       }
 
-      // If target is STILL not resolved, do NOT leave the user with an empty screen!
-      // Fall back intelligently to active instrument, recent instrument, or MAGMA USDT
-      if (!target) {
-        if (selectedInstrument && selectedInstrument !== 'NIFTY') {
-          target = selectedInstrument;
-        } else if (recents.length > 0 && recents[0] !== 'NIFTY') {
-          target = recents[0];
-        } else {
-          target = 'MAGMA USDT';
-        }
+      if (target) {
+        setUrlMessage(`Live retrieval confirmed: Identified ${target} from TradingView snapshot. Generating real-time market analysis...`);
+        setSelectedInstrument(target);
+        setScreenshotInstrument(target);
+        setFallbackSymbol(target);
+        setUrlSymbolInput(target);
+        addRecent(target);
+
+        // Render fresh AI analysis automatically for the detected target!
+        await triggerScreenshotAnalysis(
+          parsed.snapshotUrl,
+          target,
+          '15m'
+        );
+        return;
       }
 
-      // Show the 1-click switcher bar so user can toggle in 1 click
+      // If target could not be retrieved live, DO NOT GUESS OR DEFAULT TO MAGMA!
+      setIsLoading(false);
       setUrlFallbackPrompt(true);
-
-      setSelectedInstrument(target);
-      setScreenshotInstrument(target);
-      setFallbackSymbol(target);
-      setUrlSymbolInput(target);
-      addRecent(target);
-
-      // Render fresh AI analysis automatically!
-      await triggerScreenshotAnalysis(
-        parsed.snapshotUrl,
-        target,
-        '15m'
-      );
+      setUrlMessage('TradingView snapshot image loaded. The ticker is kept private in this link. Click your instrument below to run instant analysis:');
       return;
     }
 
@@ -190,12 +184,9 @@ export const AnalyseView: React.FC = () => {
       addRecent(target);
       await runInstrumentAnalysis(target);
     } else {
-      const fallback = selectedInstrument || (recents.length > 0 ? recents[0] : 'MAGMA USDT');
-      setSelectedInstrument(fallback);
-      setUrlSymbolInput(fallback);
-      addRecent(fallback);
+      setIsLoading(false);
       setUrlFallbackPrompt(true);
-      await runInstrumentAnalysis(fallback);
+      setUrlMessage('Chart link recognized. Please select or enter the symbol to analyse:');
     }
   };
 
@@ -567,9 +558,10 @@ export const AnalyseView: React.FC = () => {
                   value={urlInput}
                   onChange={(e) => setUrlInput(e.target.value)}
                   onPaste={(e) => {
-                    const pasted = e.clipboardData.getData('text');
+                    const pasted = e.clipboardData.getData('text').trim();
                     if (pasted && (pasted.startsWith('http') || pasted.includes('tradingview') || pasted.includes('binance'))) {
                       setUrlInput(pasted);
+                      setUrlSymbolInput('');
                       processChartUrl(pasted);
                     }
                   }}
@@ -580,7 +572,7 @@ export const AnalyseView: React.FC = () => {
               <div className="w-full sm:w-48 relative">
                 <input
                   type="text"
-                  placeholder="Symbol (e.g. MAGMA, NIFTY)"
+                  placeholder="Symbol (optional override)"
                   value={urlSymbolInput}
                   onChange={(e) => {
                     const val = e.target.value.toUpperCase();
@@ -601,35 +593,35 @@ export const AnalyseView: React.FC = () => {
               </button>
             </form>
 
-            {/* Quick 1-Click Test Examples */}
+            {/* Quick 1-Click Test Examples with Live Retrieval */}
             <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-400">
-              <span>Quick Test Examples:</span>
-              <button
-                type="button"
-                onClick={() => {
-                  const url = 'https://www.tradingview.com/x/e0CIWLuq/';
-                  setUrlInput(url);
-                  setUrlSymbolInput('MAGMA USDT');
-                  setFallbackSymbol('MAGMA USDT');
-                  processChartUrl(url, 'MAGMA USDT');
-                }}
-                className="px-2 py-0.5 rounded bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 font-mono transition-colors"
-              >
-                Snapshot: TV Magma /x/e0CIWLuq/
-              </button>
-
+              <span className="font-semibold text-slate-300">Live Retrieval Tests:</span>
               <button
                 type="button"
                 onClick={() => {
                   const url = 'https://www.tradingview.com/x/n1NmKXVv/';
                   setUrlInput(url);
-                  setUrlSymbolInput('GTCUSDT');
-                  setFallbackSymbol('GTCUSDT');
-                  processChartUrl(url, 'GTCUSDT');
+                  setUrlSymbolInput('');
+                  processChartUrl(url);
                 }}
-                className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-indigo-300 font-mono transition-colors"
+                className="px-2.5 py-1 rounded bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 border border-indigo-500/40 font-mono transition-colors flex items-center gap-1.5"
               >
-                Snapshot: TV GTC /x/n1NmKXVv/
+                <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse" />
+                <span>Live Test: TV GTC (/x/n1NmKXVv/)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  const url = 'https://www.tradingview.com/x/e0CIWLuq/';
+                  setUrlInput(url);
+                  setUrlSymbolInput('');
+                  processChartUrl(url);
+                }}
+                className="px-2.5 py-1 rounded bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 font-mono transition-colors flex items-center gap-1.5"
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                <span>Live Test: TV Magma (/x/e0CIWLuq/)</span>
               </button>
 
               <button
@@ -637,11 +629,10 @@ export const AnalyseView: React.FC = () => {
                 onClick={() => {
                   const url = 'https://www.tradingview.com/chart/?symbol=BINANCE:ALICEUSDT';
                   setUrlInput(url);
-                  setUrlSymbolInput('ALICE USDT');
-                  setFallbackSymbol('ALICE USDT');
-                  processChartUrl(url, 'ALICE USDT');
+                  setUrlSymbolInput('');
+                  processChartUrl(url);
                 }}
-                className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 font-mono transition-colors"
+                className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 font-mono transition-colors"
               >
                 TradingView: ALICE/USDT
               </button>

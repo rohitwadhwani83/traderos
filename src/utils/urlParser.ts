@@ -267,7 +267,7 @@ export async function fetchTradingViewSnapshotInfo(
   urlStr: string
 ): Promise<{ symbol?: string; imageUrl?: string; title?: string } | null> {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 1800);
+  const timeoutId = setTimeout(() => controller.abort(), 6500);
 
   try {
     const encoded = encodeURIComponent(urlStr.trim());
