@@ -20,6 +20,8 @@ import {
   Activity,
   Flame,
   BookmarkPlus,
+  ChevronDown,
+  SlidersHorizontal,
 } from 'lucide-react';
 import { useTrading } from '../../context/TradingContext';
 
@@ -37,6 +39,7 @@ export const IntradayAnalysisCard: React.FC<IntradayAnalysisCardProps> = ({ intr
     String(user.preferences.startingCapital || 100000)
   );
   const [planSaved, setPlanSaved] = useState<boolean>(false);
+  const [showDetailedAnalysis, setShowDetailedAnalysis] = useState<boolean>(false);
 
   const numCap = parseFloat(customCapital) || 100000;
   const maxRiskAmount = Number((numCap * (intraday.plan.riskCapitalPercent / 100)).toFixed(2));
@@ -170,86 +173,7 @@ export const IntradayAnalysisCard: React.FC<IntradayAnalysisCardProps> = ({ intr
         </div>
       </div>
 
-      {/* 2. DUAL TIMEFRAME 15M & 5M ALIGNMENT PANEL */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* 15m Structural Anchor */}
-        <div className="rounded-2xl border border-slate-800 bg-[#101522] p-4 space-y-3">
-          <div className="flex items-center justify-between pb-2 border-b border-slate-800">
-            <div className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-indigo-400" />
-              <h4 className="text-xs font-bold text-white uppercase tracking-wider">
-                15-Minute Structural Frame
-              </h4>
-            </div>
-            <span
-              className={`text-[11px] font-mono font-bold px-2 py-0.5 rounded ${
-                intraday.tf15m.bias === 'BULLISH'
-                  ? 'bg-emerald-500/20 text-emerald-300'
-                  : intraday.tf15m.bias === 'BEARISH'
-                  ? 'bg-rose-500/20 text-rose-300'
-                  : 'bg-slate-800 text-slate-400'
-              }`}
-            >
-              {intraday.tf15m.bias} STRUCTURE
-            </span>
-          </div>
-
-          <div className="space-y-2 text-xs">
-            <div>
-              <span className="text-slate-400">Market Structure: </span>
-              <span className="text-slate-200 font-medium">{intraday.tf15m.structure}</span>
-            </div>
-            <div>
-              <span className="text-slate-400">Dynamic Trendline: </span>
-              <span className="text-slate-200 font-mono text-[11px]">{intraday.tf15m.trendline}</span>
-            </div>
-            <div className="flex items-center justify-between pt-1 text-[11px] text-slate-400 border-t border-slate-800/60">
-              <span>Key 15m Shelf:</span>
-              <span className="font-mono font-bold text-indigo-300">{intraday.tf15m.keyShelf}</span>
-            </div>
-          </div>
-        </div>
-
-        {/* 5m Execution Trigger */}
-        <div className="rounded-2xl border border-slate-800 bg-[#101522] p-4 space-y-3">
-          <div className="flex items-center justify-between pb-2 border-b border-slate-800">
-            <div className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse" />
-              <h4 className="text-xs font-bold text-white uppercase tracking-wider">
-                5-Minute Execution Trigger
-              </h4>
-            </div>
-            <span
-              className={`text-[11px] font-mono font-bold px-2 py-0.5 rounded ${
-                intraday.tf5m.bias === 'BULLISH'
-                  ? 'bg-emerald-500/20 text-emerald-300'
-                  : intraday.tf5m.bias === 'BEARISH'
-                  ? 'bg-rose-500/20 text-rose-300'
-                  : 'bg-slate-800 text-slate-400'
-              }`}
-            >
-              {intraday.tf5m.bias} TRIGGER
-            </span>
-          </div>
-
-          <div className="space-y-2 text-xs">
-            <div>
-              <span className="text-slate-400">Trigger Signal: </span>
-              <span className="text-slate-200 font-medium">{intraday.tf5m.trigger}</span>
-            </div>
-            <div>
-              <span className="text-slate-400">Orderflow Delta: </span>
-              <span className="text-slate-200">{intraday.tf5m.orderflow}</span>
-            </div>
-            <div className="flex items-center justify-between pt-1 text-[11px] text-slate-400 border-t border-slate-800/60">
-              <span>Volume Confirmation:</span>
-              <span className="font-mono text-emerald-400">{intraday.tf5m.volumeConfirmation}</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* 3. BEST BUYING/SELLING PRICE WITH RISK 15% & REWARD 30% TO 45% */}
+      {/* 2. INTRADAY RISK & REWARD MATHEMATICAL ENGINE */}
       <div className="rounded-2xl border border-indigo-500/30 bg-[#0d121f] p-5 shadow-xl space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
           <div className="flex items-center gap-2">
@@ -363,130 +287,241 @@ export const IntradayAnalysisCard: React.FC<IntradayAnalysisCardProps> = ({ intr
         </div>
       </div>
 
-      {/* 4. SMART MONEY CONCEPTS (SMC): FVG, LIQUIDITY SWEEP & PRICE ACTION */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {/* Fair Value Gap Card */}
-        <div className="rounded-2xl border border-slate-800 bg-[#101522] p-4 space-y-2.5">
-          <div className="flex items-center justify-between pb-2 border-b border-slate-800">
-            <div className="flex items-center gap-1.5">
-              <Layers className="w-4 h-4 text-amber-400" />
-              <h4 className="text-xs font-bold text-white uppercase tracking-wider">
-                Fair Value Gap (FVG)
-              </h4>
-            </div>
-            <span
-              className={`text-[10px] font-mono px-2 py-0.5 rounded font-semibold ${
-                intraday.fvg.status === 'TESTING / MITIGATION'
-                  ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 animate-pulse'
-                  : 'bg-slate-800 text-slate-400'
+      {/* 3. OPTIONAL COLLAPSIBLE BACKEND ANALYSIS DETAILS (FVG, LIQUIDITY SWEEP & TRENDLINES) */}
+      <div className="pt-1">
+        <button
+          type="button"
+          onClick={() => setShowDetailedAnalysis(!showDetailedAnalysis)}
+          className="w-full flex items-center justify-between p-3.5 rounded-xl bg-[#0a0e1a] hover:bg-[#0f1526] border border-slate-800 text-xs text-slate-400 hover:text-slate-200 transition-all group shadow-sm"
+        >
+          <div className="flex items-center gap-2">
+            <SlidersHorizontal className="w-4 h-4 text-indigo-400" />
+            <span className="font-semibold text-slate-300">
+              Backend SMC &amp; Technical Breakdown
+            </span>
+            <span className="hidden sm:inline text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-400 font-mono">
+              Calculated to arrive at Verdict (FVG, Liquidity &amp; Trendlines)
+            </span>
+          </div>
+
+          <div className="flex items-center gap-1.5 text-indigo-400 group-hover:text-indigo-300 font-medium">
+            <span>{showDetailedAnalysis ? 'Minimise Analysis Details' : 'Expand Analysis Details'}</span>
+            <ChevronDown
+              className={`w-4 h-4 transition-transform duration-200 ${
+                showDetailedAnalysis ? 'rotate-180 text-amber-400' : ''
               }`}
-            >
-              {intraday.fvg.status}
-            </span>
+            />
           </div>
+        </button>
 
-          <div className="space-y-1.5 text-xs">
-            <div className="flex items-center justify-between font-mono">
-              <span className="text-slate-400">Imbalance Type:</span>
-              <span className="font-bold text-indigo-300">{intraday.fvg.type}</span>
-            </div>
-            <div className="flex items-center justify-between font-mono text-[11px]">
-              <span className="text-slate-400">Zone Range:</span>
-              <span className="text-white font-bold">{intraday.fvg.bottomPrice} – {intraday.fvg.topPrice}</span>
-            </div>
-            <p className="text-[11px] text-slate-300 leading-relaxed pt-1">
-              {intraday.fvg.description}
-            </p>
-          </div>
-        </div>
+        {showDetailedAnalysis && (
+          <div className="mt-4 space-y-4">
+            {/* DUAL TIMEFRAME 15M & 5M ALIGNMENT PANEL */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* 15m Structural Anchor */}
+              <div className="rounded-2xl border border-slate-800 bg-[#101522] p-4 space-y-3">
+                <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-indigo-400" />
+                    <h4 className="text-xs font-bold text-white uppercase tracking-wider">
+                      15-Minute Structural Frame
+                    </h4>
+                  </div>
+                  <span
+                    className={`text-[11px] font-mono font-bold px-2 py-0.5 rounded ${
+                      intraday.tf15m.bias === 'BULLISH'
+                        ? 'bg-emerald-500/20 text-emerald-300'
+                        : intraday.tf15m.bias === 'BEARISH'
+                        ? 'bg-rose-500/20 text-rose-300'
+                        : 'bg-slate-800 text-slate-400'
+                    }`}
+                  >
+                    {intraday.tf15m.bias} STRUCTURE
+                  </span>
+                </div>
 
-        {/* Liquidity Sweep Card */}
-        <div className="rounded-2xl border border-slate-800 bg-[#101522] p-4 space-y-2.5">
-          <div className="flex items-center justify-between pb-2 border-b border-slate-800">
-            <div className="flex items-center gap-1.5">
-              <Flame className="w-4 h-4 text-rose-400" />
-              <h4 className="text-xs font-bold text-white uppercase tracking-wider">
-                Liquidity Sweep
-              </h4>
-            </div>
-            <span
-              className={`text-[10px] font-mono px-2 py-0.5 rounded font-semibold ${
-                intraday.liquiditySweep.status === 'SWEPT & RECLAIMED'
-                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
-                  : intraday.liquiditySweep.status === 'SWEPT & REJECTED'
-                  ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
-                  : 'bg-slate-800 text-slate-400'
-              }`}
-            >
-              {intraday.liquiditySweep.status}
-            </span>
-          </div>
-
-          <div className="space-y-1.5 text-xs">
-            <div className="flex items-center justify-between font-mono">
-              <span className="text-slate-400">Target Pool:</span>
-              <span className="font-bold text-rose-300">{intraday.liquiditySweep.type}</span>
-            </div>
-            <div className="flex items-center justify-between font-mono text-[11px]">
-              <span className="text-slate-400">Key Level:</span>
-              <span className="text-white font-bold">{intraday.liquiditySweep.priceLevel}</span>
-            </div>
-            <p className="text-[11px] text-slate-300 leading-relaxed pt-1">
-              {intraday.liquiditySweep.implication}
-            </p>
-          </div>
-        </div>
-
-        {/* Trendline & Price Action Card */}
-        <div className="rounded-2xl border border-slate-800 bg-[#101522] p-4 space-y-2.5">
-          <div className="flex items-center justify-between pb-2 border-b border-slate-800">
-            <div className="flex items-center gap-1.5">
-              <Activity className="w-4 h-4 text-indigo-400" />
-              <h4 className="text-xs font-bold text-white uppercase tracking-wider">
-                Trendline &amp; Price Action
-              </h4>
-            </div>
-            <span className="text-[10px] font-mono px-2 py-0.5 rounded font-semibold bg-indigo-500/20 text-indigo-300 border border-indigo-500/40">
-              {intraday.trendline.status}
-            </span>
-          </div>
-
-          <div className="space-y-1.5 text-xs">
-            <div className="flex items-center justify-between font-mono">
-              <span className="text-slate-400">Pattern Setup:</span>
-              <span className="font-bold text-emerald-300">{intraday.priceActionPattern.name}</span>
-            </div>
-            <div className="flex items-center justify-between font-mono text-[11px]">
-              <span className="text-slate-400">Trendline Angle:</span>
-              <span className="text-white font-bold">{intraday.trendline.trendSlope}</span>
-            </div>
-            <p className="text-[11px] text-slate-300 leading-relaxed pt-1">
-              {intraday.trendline.description}
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* 5. DECISION RATIONALE (INSTITUTIONAL CONFLUENCE) */}
-      <div className="rounded-2xl border border-slate-800 bg-[#101522] p-4 sm:p-5 space-y-3">
-        <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
-          <Sparkles className="w-4 h-4 text-amber-400" />
-          <span>Institutional Confluence &amp; Decision Rationale</span>
-        </h4>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 text-xs">
-          {intraday.decisionRationale.map((rationale, idx) => (
-            <div
-              key={idx}
-              className="p-3 rounded-xl bg-[#090d16] border border-slate-800/80 flex items-start gap-2.5 text-slate-300"
-            >
-              <div className="w-4 h-4 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center text-[10px] font-bold flex-shrink-0 mt-0.5">
-                {idx + 1}
+                <div className="space-y-2 text-xs">
+                  <div>
+                    <span className="text-slate-400">Market Structure: </span>
+                    <span className="text-slate-200 font-medium">{intraday.tf15m.structure}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400">Dynamic Trendline: </span>
+                    <span className="text-slate-200 font-mono text-[11px]">{intraday.tf15m.trendline}</span>
+                  </div>
+                  <div className="flex items-center justify-between pt-1 text-[11px] text-slate-400 border-t border-slate-800/60">
+                    <span>Key 15m Shelf:</span>
+                    <span className="font-mono font-bold text-indigo-300">{intraday.tf15m.keyShelf}</span>
+                  </div>
+                </div>
               </div>
-              <span className="leading-relaxed">{rationale}</span>
+
+              {/* 5m Execution Trigger */}
+              <div className="rounded-2xl border border-slate-800 bg-[#101522] p-4 space-y-3">
+                <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse" />
+                    <h4 className="text-xs font-bold text-white uppercase tracking-wider">
+                      5-Minute Execution Trigger
+                    </h4>
+                  </div>
+                  <span
+                    className={`text-[11px] font-mono font-bold px-2 py-0.5 rounded ${
+                      intraday.tf5m.bias === 'BULLISH'
+                        ? 'bg-emerald-500/20 text-emerald-300'
+                        : intraday.tf5m.bias === 'BEARISH'
+                        ? 'bg-rose-500/20 text-rose-300'
+                        : 'bg-slate-800 text-slate-400'
+                    }`}
+                  >
+                    {intraday.tf5m.bias} TRIGGER
+                  </span>
+                </div>
+
+                <div className="space-y-2 text-xs">
+                  <div>
+                    <span className="text-slate-400">Trigger Signal: </span>
+                    <span className="text-slate-200 font-medium">{intraday.tf5m.trigger}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400">Orderflow Delta: </span>
+                    <span className="text-slate-200">{intraday.tf5m.orderflow}</span>
+                  </div>
+                  <div className="flex items-center justify-between pt-1 text-[11px] text-slate-400 border-t border-slate-800/60">
+                    <span>Volume Confirmation:</span>
+                    <span className="font-mono text-emerald-400">{intraday.tf5m.volumeConfirmation}</span>
+                  </div>
+                </div>
+              </div>
             </div>
-          ))}
-        </div>
+
+            {/* SMART MONEY CONCEPTS (SMC): FVG, LIQUIDITY SWEEP & PRICE ACTION */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Fair Value Gap Card */}
+              <div className="rounded-2xl border border-slate-800 bg-[#101522] p-4 space-y-2.5">
+                <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+                  <div className="flex items-center gap-1.5">
+                    <Layers className="w-4 h-4 text-amber-400" />
+                    <h4 className="text-xs font-bold text-white uppercase tracking-wider">
+                      Fair Value Gap (FVG)
+                    </h4>
+                  </div>
+                  <span
+                    className={`text-[10px] font-mono px-2 py-0.5 rounded font-semibold ${
+                      intraday.fvg.status === 'TESTING / MITIGATION'
+                        ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 animate-pulse'
+                        : 'bg-slate-800 text-slate-400'
+                    }`}
+                  >
+                    {intraday.fvg.status}
+                  </span>
+                </div>
+
+                <div className="space-y-1.5 text-xs">
+                  <div className="flex items-center justify-between font-mono">
+                    <span className="text-slate-400">Imbalance Type:</span>
+                    <span className="font-bold text-indigo-300">{intraday.fvg.type}</span>
+                  </div>
+                  <div className="flex items-center justify-between font-mono text-[11px]">
+                    <span className="text-slate-400">Zone Range:</span>
+                    <span className="text-white font-bold">{intraday.fvg.bottomPrice} – {intraday.fvg.topPrice}</span>
+                  </div>
+                  <p className="text-[11px] text-slate-300 leading-relaxed pt-1">
+                    {intraday.fvg.description}
+                  </p>
+                </div>
+              </div>
+
+              {/* Liquidity Sweep Card */}
+              <div className="rounded-2xl border border-slate-800 bg-[#101522] p-4 space-y-2.5">
+                <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+                  <div className="flex items-center gap-1.5">
+                    <Flame className="w-4 h-4 text-rose-400" />
+                    <h4 className="text-xs font-bold text-white uppercase tracking-wider">
+                      Liquidity Sweep
+                    </h4>
+                  </div>
+                  <span
+                    className={`text-[10px] font-mono px-2 py-0.5 rounded font-semibold ${
+                      intraday.liquiditySweep.status === 'SWEPT & RECLAIMED'
+                        ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                        : intraday.liquiditySweep.status === 'SWEPT & REJECTED'
+                        ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
+                        : 'bg-slate-800 text-slate-400'
+                    }`}
+                  >
+                    {intraday.liquiditySweep.status}
+                  </span>
+                </div>
+
+                <div className="space-y-1.5 text-xs">
+                  <div className="flex items-center justify-between font-mono">
+                    <span className="text-slate-400">Target Pool:</span>
+                    <span className="font-bold text-rose-300">{intraday.liquiditySweep.type}</span>
+                  </div>
+                  <div className="flex items-center justify-between font-mono text-[11px]">
+                    <span className="text-slate-400">Key Level:</span>
+                    <span className="text-white font-bold">{intraday.liquiditySweep.priceLevel}</span>
+                  </div>
+                  <p className="text-[11px] text-slate-300 leading-relaxed pt-1">
+                    {intraday.liquiditySweep.implication}
+                  </p>
+                </div>
+              </div>
+
+              {/* Trendline & Price Action Card */}
+              <div className="rounded-2xl border border-slate-800 bg-[#101522] p-4 space-y-2.5">
+                <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+                  <div className="flex items-center gap-1.5">
+                    <Activity className="w-4 h-4 text-indigo-400" />
+                    <h4 className="text-xs font-bold text-white uppercase tracking-wider">
+                      Trendline &amp; Price Action
+                    </h4>
+                  </div>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded font-semibold bg-indigo-500/20 text-indigo-300 border border-indigo-500/40">
+                    {intraday.trendline.status}
+                  </span>
+                </div>
+
+                <div className="space-y-1.5 text-xs">
+                  <div className="flex items-center justify-between font-mono">
+                    <span className="text-slate-400">Pattern Setup:</span>
+                    <span className="font-bold text-emerald-300">{intraday.priceActionPattern.name}</span>
+                  </div>
+                  <div className="flex items-center justify-between font-mono text-[11px]">
+                    <span className="text-slate-400">Trendline Angle:</span>
+                    <span className="text-white font-bold">{intraday.trendline.trendSlope}</span>
+                  </div>
+                  <p className="text-[11px] text-slate-300 leading-relaxed pt-1">
+                    {intraday.trendline.description}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* DECISION RATIONALE (INSTITUTIONAL CONFLUENCE) */}
+            <div className="rounded-2xl border border-slate-800 bg-[#101522] p-4 sm:p-5 space-y-3">
+              <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-amber-400" />
+                <span>Institutional Confluence &amp; Decision Rationale</span>
+              </h4>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 text-xs">
+                {intraday.decisionRationale.map((rationale, idx) => (
+                  <div
+                    key={idx}
+                    className="p-3 rounded-xl bg-[#090d16] border border-slate-800/80 flex items-start gap-2.5 text-slate-300"
+                  >
+                    <div className="w-4 h-4 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center text-[10px] font-bold flex-shrink-0 mt-0.5">
+                      {idx + 1}
+                    </div>
+                    <span className="leading-relaxed">{rationale}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
