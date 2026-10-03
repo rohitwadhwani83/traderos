@@ -46,15 +46,15 @@ export const IntradayAnalysisCard: React.FC<IntradayAnalysisCardProps> = ({ intr
   const potentialGainT1 = Number((numCap * (intraday.plan.rewardTarget1Percent / 100)).toFixed(2));
   const potentialGainT2 = Number((numCap * (intraday.plan.rewardTarget2Percent / 100)).toFixed(2));
 
-  const stopDist = intraday.plan.stopDistance;
-  const rawUnits = stopDist > 0 ? maxRiskAmount / stopDist : 0;
+  const entry = intraday.plan.entryPrice;
+  const rawUnits = entry > 0 ? numCap / entry : 0;
   const positionSize = rawUnits >= 10
     ? Math.floor(rawUnits)
     : rawUnits >= 1
     ? Number(rawUnits.toFixed(2))
     : Number(rawUnits.toFixed(4));
-  const capitalRequired = Number((positionSize * intraday.plan.entryPrice).toFixed(2));
-  const capitalUtilization = numCap > 0 ? Number(((capitalRequired / numCap) * 100).toFixed(1)) : 0;
+  const capitalRequired = Number((positionSize * entry).toFixed(2));
+  const capitalUtilization = 100;
 
   const isBullish = intraday.verdict === 'BULLISH TRADE';
   const isBearish = intraday.verdict === 'BEARISH TRADE';
@@ -188,10 +188,10 @@ export const IntradayAnalysisCard: React.FC<IntradayAnalysisCardProps> = ({ intr
             </div>
           </div>
 
-          {/* Interactive Capital Input */}
+          {/* Interactive Capital Deployed Input */}
           <div className="flex items-center gap-2 bg-[#161d2c] border border-slate-700/80 rounded-xl px-3 py-1.5">
             <label className="text-[11px] text-slate-400 font-medium whitespace-nowrap">
-              Account Capital:
+              Capital Deployed:
             </label>
             <input
               type="number"
@@ -271,18 +271,18 @@ export const IntradayAnalysisCard: React.FC<IntradayAnalysisCardProps> = ({ intr
           </div>
 
           <div>
-            <span className="text-slate-400">Capital Required: </span>
+            <span className="text-slate-400">Capital Deployed: </span>
             <span className="font-mono font-bold text-slate-200">
               {formatCurrency(capitalRequired, currency)}
             </span>
             <span className="text-[11px] text-slate-400 font-mono ml-1">
-              ({capitalUtilization}% account)
+              ({capitalUtilization}% deployed)
             </span>
           </div>
 
           <div className="flex items-center gap-1.5 font-mono text-[11px] text-indigo-300">
             <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Strict Invalidation Rule: Close on 5m breach of Stop</span>
+            <span>Strict Invalidation Rule: Stop triggers at -15% capital loss ({intraday.plan.stopLoss})</span>
           </div>
         </div>
       </div>

@@ -132,4 +132,36 @@ describe('Intraday Analysis Service', () => {
     expect(analysis.verdictConfidence).toBe('NO TRADE / CHOP ZONE');
     expect(analysis.decisionRationale.some((r) => r.includes('Stay in cash'))).toBe(true);
   });
+
+  it('calculates Stop Loss and Targets strictly as 15% risk and 30%/45% reward of capital deployed on micro-priced assets (0.078)', () => {
+    const pennyQuote: MarketQuote = {
+      ...baseQuote,
+      symbol: 'MAGMA',
+      price: 0.078,
+    };
+
+    const analysis = generateIntradayAnalysis({
+      quote: pennyQuote,
+      technicals: { ...baseTechnicals, atr14: 0.004, vwap: 0.077, ema20: 0.076 },
+      mtf: bullishMtf,
+      capital: 6000,
+    });
+
+    expect(analysis.verdict).toBe('BULLISH TRADE');
+    expect(analysis.plan.entryPrice).toBe(0.078);
+
+    // Stop Loss is strictly -15% of capital deployed: 0.078 * 0.85 = 0.0663
+    expect(analysis.plan.stopLoss).toBe(0.0663);
+
+    // Target 1 is strictly +30% of capital deployed: 0.078 * 1.30 = 0.1014
+    expect(analysis.plan.target1).toBe(0.1014);
+
+    // Target 2 is strictly +45% of capital deployed: 0.078 * 1.45 = 0.1131
+    expect(analysis.plan.target2).toBe(0.1131);
+
+    // Monetary amounts on 6000 deployed capital
+    expect(analysis.plan.maxCapitalRiskAmount).toBe(900); // 15% of 6000
+    expect(analysis.plan.potentialGainT1Amount).toBe(1800); // 30% of 6000
+    expect(analysis.plan.potentialGainT2Amount).toBe(2700); // 45% of 6000
+  });
 });

@@ -197,65 +197,59 @@ export function generateIntradayAnalysis(params: GenerateIntradayAnalysisParams)
       : `Horizontal compression range between ${pdl} and ${pdh}. Trendline slope is neutral with contracting volume.`,
   };
 
-  // 5. Risk 15% & Reward 30% to 45% Mathematical Execution Plan
-  const riskCapitalPercent = 15; // 15% Max Capital Risk
-  const rewardTarget1Percent = 30; // 30% Capital Reward (1:2 RR)
-  const rewardTarget2Percent = 45; // 45% Capital Reward (1:3 RR)
+  // 5. Risk 15% & Reward 30% to 45% Mathematical Execution Plan (Calculated on Deployed Capital)
+  const riskCapitalPercent = 15; // 15% Max Deployed Capital Risk
+  const rewardTarget1Percent = 30; // 30% Deployed Capital Reward (1:2 RR)
+  const rewardTarget2Percent = 45; // 45% Deployed Capital Reward (1:3 RR)
 
-  const maxCapitalRiskAmount = roundCurrency(capital * (riskCapitalPercent / 100)); // Exactly 15% of capital
-  const potentialGainT1Amount = roundCurrency(capital * (rewardTarget1Percent / 100)); // Exactly 30% of capital
-  const potentialGainT2Amount = roundCurrency(capital * (rewardTarget2Percent / 100)); // Exactly 45% of capital
+  const maxCapitalRiskAmount = roundCurrency(capital * (riskCapitalPercent / 100)); // Exactly 15% of deployed capital
+  const potentialGainT1Amount = roundCurrency(capital * (rewardTarget1Percent / 100)); // Exactly 30% of deployed capital
+  const potentialGainT2Amount = roundCurrency(capital * (rewardTarget2Percent / 100)); // Exactly 45% of deployed capital
 
   let bestPriceType: IntradayRiskRewardPlan['bestPriceType'] = 'NO CLEAR ENTRY';
   let entryPrice = price;
   let entryZoneMin = price;
   let entryZoneMax = price;
-  let stopLoss = round(price * 0.985);
-  let stopDistance = round(price * 0.015);
-  let target1 = round(price * 1.03);
-  let target2 = round(price * 1.045);
+  let stopLoss = round(price * 0.85);
+  let stopDistance = round(price * 0.15);
+  let target1 = round(price * 1.30);
+  let target2 = round(price * 1.45);
 
   if (verdict === 'BULLISH TRADE') {
     bestPriceType = 'BEST BUYING PRICE';
-    // Optimal Trade Entry at discount FVG / Retest shelf
-    entryPrice = round(Math.min(price, fvgTop));
-    entryZoneMin = round(Math.min(fvgBottom, price * 0.995));
-    entryZoneMax = round(Math.max(fvgTop, price));
+    entryPrice = round(price);
+    entryZoneMin = round(price * 0.998);
+    entryZoneMax = round(price * 1.002);
     
-    // Invalidation placed right below the swept liquidity low / structural shelf
-    const rawStop = Math.min(liquiditySweep.priceLevel, fvgBottom - atr * 0.4);
-    stopLoss = round(rawStop > 0 && rawStop < entryPrice ? rawStop : entryPrice - atr * 0.8);
-    stopDistance = round(Math.max(entryPrice - stopLoss, price * 0.002));
+    // Stop Loss is calculated strictly at -15% of capital deployed
+    stopLoss = round(entryPrice * (1 - riskCapitalPercent / 100)); // Exactly -15%
+    stopDistance = round(entryPrice * (riskCapitalPercent / 100)); // Exactly 15%
 
-    // Target 1 gives exactly 1:2.0 RR (30% capital gain)
-    // Target 2 gives exactly 1:3.0 RR (45% capital gain)
-    target1 = round(entryPrice + stopDistance * 2.0);
-    target2 = round(entryPrice + stopDistance * 3.0);
+    // Targets calculated strictly at +30% (1:2 RR) and +45% (1:3 RR) of capital deployed
+    target1 = round(entryPrice * (1 + rewardTarget1Percent / 100)); // Exactly +30%
+    target2 = round(entryPrice * (1 + rewardTarget2Percent / 100)); // Exactly +45%
   } else if (verdict === 'BEARISH TRADE') {
     bestPriceType = 'BEST SELLING PRICE';
-    // Optimal Selling Entry at premium FVG / Retest shelf
-    entryPrice = round(Math.max(price, fvgBottom));
-    entryZoneMin = round(Math.min(fvgBottom, price));
-    entryZoneMax = round(Math.max(fvgTop, price * 1.005));
+    entryPrice = round(price);
+    entryZoneMin = round(price * 0.998);
+    entryZoneMax = round(price * 1.002);
 
-    // Invalidation placed right above the swept liquidity high / structural shelf
-    const rawStop = Math.max(liquiditySweep.priceLevel, fvgTop + atr * 0.4);
-    stopLoss = round(rawStop > entryPrice ? rawStop : entryPrice + atr * 0.8);
-    stopDistance = round(Math.max(stopLoss - entryPrice, price * 0.002));
+    // Stop Loss is calculated strictly at +15% of capital deployed (for short)
+    stopLoss = round(entryPrice * (1 + riskCapitalPercent / 100)); // Exactly +15%
+    stopDistance = round(entryPrice * (riskCapitalPercent / 100)); // Exactly 15%
 
-    // Target 1 gives exactly 1:2.0 RR (30% capital gain)
-    // Target 2 gives exactly 1:3.0 RR (45% capital gain)
-    target1 = round(entryPrice - stopDistance * 2.0);
-    target2 = round(entryPrice - stopDistance * 3.0);
+    // Targets calculated strictly at -30% (1:2 RR) and -45% (1:3 RR) of capital deployed
+    target1 = round(entryPrice * (1 - rewardTarget1Percent / 100)); // Exactly -30%
+    target2 = round(entryPrice * (1 - rewardTarget2Percent / 100)); // Exactly -45%
   } else {
     bestPriceType = 'NO CLEAR ENTRY';
     entryPrice = price;
     entryZoneMin = round(price * 0.998);
     entryZoneMax = round(price * 1.002);
-    stopLoss = round(price * 0.985);
-    stopDistance = round(price * 0.015);
-    target1 = round(price * 1.03);
-    target2 = round(price * 1.045);
+    stopLoss = round(price * 0.85);
+    stopDistance = round(price * 0.15);
+    target1 = round(price * 1.30);
+    target2 = round(price * 1.45);
   }
 
   // Calculate Suggested Position Sizing based on 15% Capital Risk
