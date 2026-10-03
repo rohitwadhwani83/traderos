@@ -8,12 +8,14 @@ import { MultiTimeframeGrid } from './MultiTimeframeGrid';
 import { AnalysisResultCard } from './AnalysisResultCard';
 import { RiskCalculator } from './RiskCalculator';
 import { TradePlansList } from './TradePlansList';
+import { IntradayAnalysisCard } from './IntradayAnalysisCard';
 import {
   Upload,
   Search,
   Link as LinkIcon,
   Sparkles,
   LineChart,
+  Zap,
   AlertTriangle,
   RefreshCw,
   Info,
@@ -22,6 +24,8 @@ import {
   ArrowRight,
   Star,
 } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
+import { generateIntradayAnalysis, IntradayAnalysisResult } from '../../services/ai/intradayAnalysis';
 import { useRecentAndFavoriteInstruments } from '../../hooks/useRecentAndFavoriteInstruments';
 import { QuickInstrumentChips } from './QuickInstrumentChips';
 
@@ -37,7 +41,10 @@ export const AnalyseView: React.FC = () => {
   const [screenshotInstrument, setScreenshotInstrument] = useState<string>('ALICE USDT');
   const [screenshotTimeframe, setScreenshotTimeframe] = useState<string>('5m');
 
+  const { user } = useAuth();
+  const [tradingMode, setTradingMode] = useState<'swing' | 'intraday'>('swing');
   const [analysis, setAnalysis] = useState<MarketAnalysis | null>(null);
+  const [intradayAnalysis, setIntradayAnalysis] = useState<IntradayAnalysisResult | null>(null);
   const [mtfData, setMtfData] = useState<any | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -60,6 +67,7 @@ export const AnalyseView: React.FC = () => {
     addRecent(cleanSym);
     // Explicitly reset prior analysis so fresh insights load with clear visual feedback
     setAnalysis(null);
+    setIntradayAnalysis(null);
     setMtfData(null);
     setIsLoading(true);
     setError(null);
@@ -75,8 +83,16 @@ export const AnalyseView: React.FC = () => {
         mtf,
       });
 
+      const intraday = generateIntradayAnalysis({
+        quote,
+        technicals,
+        mtf,
+        capital: user.preferences?.startingCapital || 100000,
+      });
+
       setMtfData(mtf);
       setAnalysis(generated);
+      setIntradayAnalysis(intraday);
 
       // Smooth scroll to analysis results
       setTimeout(() => {
@@ -121,6 +137,7 @@ export const AnalyseView: React.FC = () => {
 
     // 1. Immediately wipe previous analysis completely!
     setAnalysis(null);
+    setIntradayAnalysis(null);
     setMtfData(null);
     setIsLoading(true);
 
@@ -203,6 +220,7 @@ export const AnalyseView: React.FC = () => {
     addRecent(cleanSym);
     // Explicitly reset prior analysis so fresh insights load with clear visual feedback
     setAnalysis(null);
+    setIntradayAnalysis(null);
     setMtfData(null);
     setIsLoading(true);
     setError(null);
@@ -213,13 +231,19 @@ export const AnalyseView: React.FC = () => {
         userSpecifiedTimeframe: tf,
       });
       setAnalysis(generated);
-      if (generated.mtfData) {
-        setMtfData(generated.mtfData);
-      } else {
-        const quote = await marketDataProvider.getQuote(cleanSym);
-        const mtf = await marketDataProvider.getMultiTimeframeData(quote.symbol);
-        setMtfData(mtf);
-      }
+
+      const quote = await marketDataProvider.getQuote(cleanSym);
+      const technicals = await marketDataProvider.getTechnicalData(quote.symbol);
+      const mtf = generated.mtfData || (await marketDataProvider.getMultiTimeframeData(quote.symbol));
+      setMtfData(mtf);
+
+      const intraday = generateIntradayAnalysis({
+        quote,
+        technicals,
+        mtf,
+        capital: user.preferences?.startingCapital || 100000,
+      });
+      setIntradayAnalysis(intraday);
 
       // Auto-scroll directly to results
       setTimeout(() => {
@@ -526,6 +550,7 @@ export const AnalyseView: React.FC = () => {
                       onClick={() => {
                         setScreenshotData(null);
                         setAnalysis(null);
+                        setIntradayAnalysis(null);
                       }}
                       className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-medium transition-colors"
                     >
@@ -810,25 +835,91 @@ export const AnalyseView: React.FC = () => {
       {/* Main Analysis Display Anchor */}
       <div ref={resultsRef} />
 
-      {!isLoading && analysis && (
+      {!isLoading && (analysis || intradayAnalysis) && (
         <div className="space-y-6">
-          {/* Multi-Timeframe Alignment Grid */}
-          {mtfData && <MultiTimeframeGrid key={`mtf-${analysis.id}`} mtf={mtfData} />}
+          {/* Segregated Trading Mode Toggle: Swing vs Intraday */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 p-2.5 rounded-2xl bg-[#0b0f19] border border-slate-800/90 shadow-xl">
+            <div className="flex p-1 bg-[#141b2a] rounded-xl border border-slate-700/60 shadow-inner">
+              <button
+                type="button"
+                onClick={() => setTradingMode('swing')}
+                className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-xs font-bold transition-all ${
+                  tradingMode === 'swing'
+                    ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-md shadow-indigo-500/25 ring-1 ring-indigo-400/40'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <LineChart className="w-3.5 h-3.5" />
+                <span>Swing Trading</span>
+                <span className="hidden md:inline text-[10px] opacity-75 font-normal">
+                  (Comprehensive 16-Pt &amp; MTF)
+                </span>
+              </button>
 
-          {/* Standard 16-point Analysis Card */}
-          <AnalysisResultCard key={`res-${analysis.id}`} analysis={analysis} />
+              <button
+                type="button"
+                onClick={() => setTradingMode('intraday')}
+                className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-xs font-bold transition-all ${
+                  tradingMode === 'intraday'
+                    ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 shadow-md shadow-amber-500/25 font-black ring-1 ring-amber-400/60'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <Zap className="w-3.5 h-3.5" />
+                <span>Intraday Trading</span>
+                <span className="hidden md:inline text-[10px] opacity-90 font-semibold">
+                  (5m/15m SMC • 15% Risk)
+                </span>
+              </button>
+            </div>
 
-          {/* Integrated Risk Calculator */}
-          <RiskCalculator
-            key={`risk-${analysis.id}`}
-            initialEntry={analysis.entryZone.min}
-            initialStop={analysis.invalidation}
-            initialTarget={analysis.targetZone.target1}
-            initialDirection={analysis.bias === 'BEARISH' ? 'SHORT' : 'LONG'}
-          />
+            <div className="hidden sm:flex items-center gap-2 text-[11px] pr-2">
+              {tradingMode === 'swing' ? (
+                <div className="flex items-center gap-1.5 text-indigo-300">
+                  <span className="w-2 h-2 rounded-full bg-indigo-400 animate-pulse" />
+                  <span>Swing Mode: Multi-timeframe trend alignment, 16-point analysis &amp; risk sizing</span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-1.5 text-amber-300">
+                  <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+                  <span>Intraday Mode: 5m/15m Verdict, 15% Risk &amp; 30-45% Reward, FVG &amp; Liquidity Sweeps</span>
+                </div>
+              )}
+            </div>
+          </div>
 
-          {/* Saved Trade Plans ("Planned vs Actual") */}
-          <TradePlansList key={`plans-${analysis.id}`} />
+          {/* SWING TRADING VIEW */}
+          {tradingMode === 'swing' && analysis && (
+            <div className="space-y-6">
+              {/* Multi-Timeframe Alignment Grid */}
+              {mtfData && <MultiTimeframeGrid key={`mtf-${analysis.id}`} mtf={mtfData} />}
+
+              {/* Standard 16-point Analysis Card */}
+              <AnalysisResultCard key={`res-${analysis.id}`} analysis={analysis} />
+
+              {/* Integrated Risk Calculator */}
+              <RiskCalculator
+                key={`risk-${analysis.id}`}
+                initialEntry={analysis.entryZone.min}
+                initialStop={analysis.invalidation}
+                initialTarget={analysis.targetZone.target1}
+                initialDirection={analysis.bias === 'BEARISH' ? 'SHORT' : 'LONG'}
+              />
+
+              {/* Saved Trade Plans ("Planned vs Actual") */}
+              <TradePlansList key={`plans-${analysis.id}`} />
+            </div>
+          )}
+
+          {/* INTRADAY TRADING VIEW */}
+          {tradingMode === 'intraday' && intradayAnalysis && (
+            <div className="space-y-6">
+              <IntradayAnalysisCard key={`intraday-${intradayAnalysis.id}`} intraday={intradayAnalysis} />
+
+              {/* Saved Trade Plans */}
+              <TradePlansList key={`plans-intraday-${intradayAnalysis.id}`} />
+            </div>
+          )}
         </div>
       )}
     </div>
